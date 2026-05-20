@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #f5f3ff;
+  --color-brand-100: #ede9fe;
+  --color-brand-200: #ddd6fe;
+  --color-brand-300: #c4b5fd;
+  --color-brand-400: #a78bfa;
+  --color-brand-500: #8b5cf6;
+  --color-brand-600: #7c3aed; /* Electric violet */
+  --color-brand-700: #6d28d9;
+  --color-brand-800: #5b21b6;
+  --color-brand-900: #4c1d95;
+
+  --color-accent-400: #22d3ee;
+  --color-accent-500: #06b6d4; /* Cyan */
+  --color-accent-600: #0891b2;
+
+  --color-dark-bg: #0a0a1a;
+  --color-dark-surface: rgba(26, 10, 46, 0.6);
+}
+
+@layer base {
+  body {
+    @apply bg-[#0a0a1a] text-slate-100 overflow-x-hidden min-h-screen font-sans antialiased;
+    background: radial-gradient(circle at top left, #1a0a2e 0%, #0a0a1a 100%);
+  }
+}
+
+/* Animations */
+@keyframes drift {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+.bg-orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  z-index: -1;
+  opacity: 0.5;
+  animation: drift 20s infinite ease-in-out;
+}
+
+.glass-card {
+  @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.1)];
+}
+.glass-input {
+  @apply bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all;
+}
+.glass-button {
+  @apply bg-brand-600/80 hover:bg-brand-500 backdrop-blur-md text-white font-medium py-2 px-4 rounded-lg transition-all shadow-[0_0_15px_rgba(124,58,237,0.5)] hover:shadow-[0_0_25px_rgba(124,58,237,0.8)];
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
