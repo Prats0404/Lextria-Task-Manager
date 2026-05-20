@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { supabase } from './supabaseClient';
 import {
   DndContext,
   closestCenter,
@@ -189,11 +190,7 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
-  const [departments, setDepartments] = useState(() => {
-    const saved = localStorage.getItem('lextriaDataV2');
-    if (saved) return JSON.parse(saved);
-    return defaultData;
-  });
+  const [departments, setDepartments] = useState([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
@@ -223,10 +220,41 @@ export default function App() {
   const [selectedTaskDetails, setSelectedTaskDetails] = useState(null);
   const [activeDragItem, setActiveDragItem] = useState(null);
 
-  // Persist state
+  // Supabase Fetch & Realtime
+  const fetchData = async () => {
+    const { data: deptData } = await supabase.from('departments').select('*').order('created_at', { ascending: true });
+    const { data: boardData } = await supabase.from('boards').select('*').order('created_at', { ascending: true });
+    const { data: agentData } = await supabase.from('agents').select('*').order('created_at', { ascending: true });
+    const { data: taskData } = await supabase.from('tasks').select('*').order('created_at', { ascending: true });
+
+    if (deptData) {
+      const nested = deptData.map(d => ({
+        ...d,
+        boards: (boardData || []).filter(b => b.department_id === d.id).map(b => ({
+          ...b,
+          employees: (agentData || []).filter(a => a.board_id === b.id).map(a => ({
+            ...a,
+            tasks: (taskData || []).filter(t => t.agent_id === a.id)
+          }))
+        }))
+      }));
+      setDepartments(nested);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem('lextriaDataV2', JSON.stringify(departments));
-  }, [departments]);
+    fetchData();
+
+    const channel = supabase.channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -254,41 +282,35 @@ export default function App() {
   };
 
   // --- CRUD DEPARTMENTS ---
-  const handleAddDept = (e) => {
+  const handleAddDept = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const name = formData.get('name');
     const password = formData.get('password') || '';
     if (editingDepartment) {
-      setDepartments(departments.map(d => d.id === editingDepartment.id ? { ...d, name, password } : d));
+      await supabase.from('departments').update({ name, password }).eq('id', editingDepartment.id);
     } else {
-      setDepartments([...departments, { id: generateId(), name, password, boards: [] }]);
+      await supabase.from('departments').insert([{ name, password }]);
     }
     setShowAddDeptModal(false);
     setEditingDepartment(null);
   };
 
   // --- CRUD BOARDS ---
-  const handleAddBoard = (e) => {
+  const handleAddBoard = async (e) => {
     e.preventDefault();
     const name = new FormData(e.target).get('name');
     if (editingBoard) {
-      setDepartments(departments.map(d => d.id === selectedDeptId ? {
-        ...d,
-        boards: d.boards.map(b => b.id === editingBoard.id ? { ...b, name } : b)
-      } : d));
+      await supabase.from('boards').update({ name }).eq('id', editingBoard.id);
     } else {
-      setDepartments(departments.map(d => d.id === selectedDeptId ? {
-        ...d,
-        boards: [...d.boards, { id: generateId(), name, employees: [] }]
-      } : d));
+      await supabase.from('boards').insert([{ department_id: selectedDeptId, name }]);
     }
     setShowAddBoardModal(false);
     setEditingBoard(null);
   };
 
   // --- CRUD AGENTS ---
-  const handleAddOrEditEmployee = (e) => {
+  const handleAddOrEditEmployee = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const name = formData.get('name');
@@ -296,27 +318,16 @@ export default function App() {
     const color = formData.get('color');
 
     if (editingEmployee) {
-      setDepartments(departments.map(d => d.id === selectedDeptId ? {
-        ...d,
-        boards: d.boards.map(b => b.id === selectedBoardId ? {
-          ...b,
-          employees: b.employees.map(emp => emp.id === editingEmployee.id ? { ...emp, name, role, color } : emp)
-        } : b)
-      } : d));
+      await supabase.from('agents').update({ name, role, color }).eq('id', editingEmployee.id);
     } else {
-      setDepartments(departments.map(d => d.id === selectedDeptId ? {
-        ...d,
-        boards: d.boards.map(b => b.id === selectedBoardId ? {
-          ...b,
-          employees: [...b.employees, { id: generateId(), name, role, color, tasks: [] }]
-        } : b)
-      } : d));
+      await supabase.from('agents').insert([{ board_id: selectedBoardId, name, role, color }]);
     }
     setShowAddEmpModal(false);
     setEditingEmployee(null);
   };
 
-  const deleteEmployee = (empId) => {
+  const deleteEmployee = async (empId) => {
+    // Optimistic
     setDepartments(departments.map(d => d.id === selectedDeptId ? {
       ...d,
       boards: d.boards.map(b => b.id === selectedBoardId ? {
@@ -324,21 +335,16 @@ export default function App() {
         employees: b.employees.filter(e => e.id !== empId)
       } : b)
     } : d));
+    await supabase.from('agents').delete().eq('id', empId);
   };
 
   // --- TASK ACTIONS ---
-  const addTask = (empId) => {
-    const newTask = { id: generateId(), title: 'New Task', completed: false, priority: 'Low', dueDate: '', reminderTime: '' };
-    setDepartments(departments.map(d => d.id === selectedDeptId ? {
-      ...d,
-      boards: d.boards.map(b => b.id === selectedBoardId ? {
-        ...b,
-        employees: b.employees.map(e => e.id === empId ? { ...e, tasks: [...e.tasks, newTask] } : e)
-      } : b)
-    } : d));
+  const addTask = async (empId) => {
+    await supabase.from('tasks').insert([{ agent_id: empId, title: 'New Task' }]);
   };
 
-  const updateTask = (empId, taskId, updates) => {
+  const updateTask = async (empId, taskId, updates) => {
+    // Optimistic
     setDepartments(departments.map(d => d.id === selectedDeptId ? {
       ...d,
       boards: d.boards.map(b => b.id === selectedBoardId ? {
@@ -348,9 +354,20 @@ export default function App() {
         } : e)
       } : b)
     } : d));
+    
+    // API
+    const dbUpdates = {};
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.completed !== undefined) dbUpdates.completed = updates.completed;
+    if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
+    if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
+    if (updates.reminderTime !== undefined) dbUpdates.reminder_time = updates.reminderTime;
+    
+    await supabase.from('tasks').update(dbUpdates).eq('id', taskId);
   };
 
-  const deleteTask = (empId, taskId) => {
+  const deleteTask = async (empId, taskId) => {
+    // Optimistic
     setDepartments(departments.map(d => d.id === selectedDeptId ? {
       ...d,
       boards: d.boards.map(b => b.id === selectedBoardId ? {
@@ -360,6 +377,7 @@ export default function App() {
         } : e)
       } : b)
     } : d));
+    await supabase.from('tasks').delete().eq('id', taskId);
   };
 
   // --- DRAG AND DROP HANDLERS ---
@@ -407,6 +425,10 @@ export default function App() {
         }
         
         active.data.current.employeeId = overEmpId;
+        
+        // Supabase async update (fire and forget)
+        supabase.from('tasks').update({ agent_id: overEmpId }).eq('id', task.id).then();
+        
         return next;
       });
     }
@@ -746,9 +768,10 @@ export default function App() {
             <p className="text-slate-300 mb-6">Are you sure you want to delete <strong className="text-white">{departmentToDelete.name}</strong>? All boards and agents will be lost.</p>
             <div className="flex justify-end space-x-3">
               <button onClick={() => setDepartmentToDelete(null)} className="px-4 py-2 rounded-lg text-slate-300 hover:bg-white/5">Cancel</button>
-              <button onClick={() => {
-                setDepartments(departments.filter(d => d.id !== departmentToDelete.id));
+              <button onClick={async () => {
+                const id = departmentToDelete.id;
                 setDepartmentToDelete(null);
+                await supabase.from('departments').delete().eq('id', id);
               }} className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20">Delete</button>
             </div>
           </div>
@@ -783,9 +806,10 @@ export default function App() {
             <p className="text-slate-300 mb-6">Are you sure you want to delete <strong className="text-white">{boardToDelete.name}</strong>? All agents and tasks inside will be lost.</p>
             <div className="flex justify-end space-x-3">
               <button onClick={() => setBoardToDelete(null)} className="px-4 py-2 rounded-lg text-slate-300 hover:bg-white/5">Cancel</button>
-              <button onClick={() => {
-                setDepartments(departments.map(d => d.id === selectedDeptId ? { ...d, boards: d.boards.filter(b => b.id !== boardToDelete.id) } : d));
+              <button onClick={async () => {
+                const id = boardToDelete.id;
                 setBoardToDelete(null);
+                await supabase.from('boards').delete().eq('id', id);
               }} className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20">Delete</button>
             </div>
           </div>
