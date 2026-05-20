@@ -229,7 +229,7 @@ export default function App() {
   const fetchData = async () => {
     const { data: deptData } = await supabase.from('departments').select('*').order('created_at', { ascending: true });
     const { data: boardData } = await supabase.from('boards').select('*').order('created_at', { ascending: true });
-    const { data: agentData } = await supabase.from('agents').select('*').order('created_at', { ascending: true });
+    const { data: agentData } = await supabase.from('agents').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
     const { data: taskData } = await supabase.from('tasks').select('*').order('created_at', { ascending: true });
 
     if (deptData) {
@@ -474,7 +474,14 @@ export default function App() {
           const board = dept.boards.find(b => b.id === selectedBoardId);
           const oldIndex = board.employees.findIndex(e => e.id === active.id);
           const newIndex = board.employees.findIndex(e => e.id === over.id);
-          board.employees = arrayMove(board.employees, oldIndex, newIndex);
+          const updatedEmployees = arrayMove(board.employees, oldIndex, newIndex);
+          board.employees = updatedEmployees;
+
+          // Asynchronously save the new custom position order to Supabase
+          updatedEmployees.forEach((emp, index) => {
+            supabase.from('agents').update({ position: index }).eq('id', emp.id).then();
+          });
+
           return next;
         });
       }
