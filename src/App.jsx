@@ -272,12 +272,12 @@ export default function App() {
 
   const handleAdminLogin = (e) => {
     e.preventDefault();
-    if (adminPassword === 'admin123') {
+    if (adminPassword === 'Lextria@334') {
       setIsAdmin(true);
       setShowAdminModal(false);
       setAdminPassword('');
     } else {
-      alert('Incorrect PIN/Password');
+      alert('Incorrect Password');
     }
   };
 
@@ -702,7 +702,7 @@ export default function App() {
             <button onClick={() => setShowAdminModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={20} /></button>
             <h2 className="text-xl font-bold mb-4 text-white flex items-center gap-2"><Lock size={20} className="text-brand-400"/> Admin Access</h2>
             <form onSubmit={handleAdminLogin} className="space-y-4">
-              <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="Enter admin PIN (admin123)" className="glass-input w-full text-center tracking-widest" autoFocus />
+              <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="Enter admin password" className="glass-input w-full text-center" autoFocus />
               <button type="submit" className="glass-button w-full">Unlock</button>
             </form>
           </div>
@@ -748,7 +748,7 @@ export default function App() {
               {isAdmin && (
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Access Password (Optional)</label>
-                  <input type="text" name="password" defaultValue={editingDepartment?.password || ''} className="glass-input w-full" placeholder="Leave empty for public access" />
+                  <input type="password" name="password" defaultValue={editingDepartment?.password || ''} className="glass-input w-full" placeholder="Leave empty for public access" />
                 </div>
               )}
               <div className="pt-4 flex justify-end space-x-3">
