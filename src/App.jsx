@@ -220,6 +220,11 @@ export default function App() {
   const [selectedTaskDetails, setSelectedTaskDetails] = useState(null);
   const [activeDragItem, setActiveDragItem] = useState(null);
 
+  // Local states for the task details editor to ensure buttery-smooth typing & inputting without network lag
+  const [localTitle, setLocalTitle] = useState('');
+  const [localDueDate, setLocalDueDate] = useState('');
+  const [localReminderTime, setLocalReminderTime] = useState('');
+
   // Supabase Fetch & Realtime
   const fetchData = async () => {
     const { data: deptData } = await supabase.from('departments').select('*').order('created_at', { ascending: true });
@@ -234,7 +239,11 @@ export default function App() {
           ...b,
           employees: (agentData || []).filter(a => a.board_id === b.id).map(a => ({
             ...a,
-            tasks: (taskData || []).filter(t => t.agent_id === a.id)
+            tasks: (taskData || []).filter(t => t.agent_id === a.id).map(t => ({
+              ...t,
+              dueDate: t.due_date,
+              reminderTime: t.reminder_time
+            }))
           }))
         }))
       }));
@@ -485,6 +494,19 @@ export default function App() {
     if (!task) return null;
     return { emp, task };
   }, [selectedTaskDetails, currentBoard]);
+
+  // Synchronize local modal editor state when the selected task changes
+  useEffect(() => {
+    if (activeTaskDetails) {
+      setLocalTitle(activeTaskDetails.task.title || '');
+      setLocalDueDate(activeTaskDetails.task.dueDate || '');
+      setLocalReminderTime(activeTaskDetails.task.reminderTime || '');
+    } else {
+      setLocalTitle('');
+      setLocalDueDate('');
+      setLocalReminderTime('');
+    }
+  }, [activeTaskDetails?.task.id]);
 
   return (
     <div className="relative min-h-screen text-slate-100 overflow-x-hidden font-sans">
@@ -874,8 +896,13 @@ export default function App() {
               <div>
                 <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Task Title</label>
                 <textarea 
-                  value={activeTaskDetails.task.title}
-                  onChange={(e) => updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { title: e.target.value })}
+                  value={localTitle}
+                  onChange={(e) => setLocalTitle(e.target.value)}
+                  onBlur={() => {
+                    if (localTitle !== activeTaskDetails.task.title) {
+                      updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { title: localTitle });
+                    }
+                  }}
                   className="glass-input w-full min-h-[120px] resize-none text-base"
                 />
               </div>
@@ -910,11 +937,27 @@ export default function App() {
               <div className="grid grid-cols-2 gap-4 pb-4">
                 <div>
                   <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={12}/> Due Date</label>
-                  <input type="date" className="glass-input w-full text-sm" value={activeTaskDetails.task.dueDate || ''} onChange={(e) => updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { dueDate: e.target.value })}/>
+                  <input 
+                    type="date" 
+                    className="glass-input w-full text-sm" 
+                    value={localDueDate} 
+                    onChange={(e) => {
+                      setLocalDueDate(e.target.value);
+                      updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { dueDate: e.target.value });
+                    }}
+                  />
                 </div>
                 <div>
                   <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1"><Bell size={12}/> Reminder</label>
-                  <input type="time" className="glass-input w-full text-sm" value={activeTaskDetails.task.reminderTime || ''} onChange={(e) => updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { reminderTime: e.target.value })}/>
+                  <input 
+                    type="time" 
+                    className="glass-input w-full text-sm" 
+                    value={localReminderTime} 
+                    onChange={(e) => {
+                      setLocalReminderTime(e.target.value);
+                      updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { reminderTime: e.target.value });
+                    }}
+                  />
                 </div>
               </div>
             </div>
