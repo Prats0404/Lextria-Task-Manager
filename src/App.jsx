@@ -155,6 +155,10 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
           </div>
         </div>
         <div className="mt-3">
+          <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-400 mb-1">
+            <span>Tasks Progress</span>
+            <span className="font-semibold text-brand-400">{tasksCompleted}/{totalTasks} ({progress}%)</span>
+          </div>
           <div className="w-full bg-slate-800/50 rounded-full h-1.5">
             <div className="bg-brand-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
