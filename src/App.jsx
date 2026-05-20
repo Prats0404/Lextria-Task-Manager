@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import {
   DndContext,
@@ -23,7 +23,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
-  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ArrowLeft
+  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft
 } from 'lucide-react';
 
 // --- INITIAL DATA & UTILS ---
@@ -228,6 +228,57 @@ export default function App() {
   const [localTitle, setLocalTitle] = useState('');
   const [localDueDate, setLocalDueDate] = useState('');
   const [localReminderTime, setLocalReminderTime] = useState('');
+
+  // Scrollbar and wheel scroll states & helpers
+  const boardContainerRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = () => {
+    const el = boardContainerRef.current;
+    if (el) {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      setCanScrollLeft(scrollLeft > 5);
+      setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 5);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedBoardId) {
+      const timer = setTimeout(checkScroll, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedBoardId, departments]);
+
+  useEffect(() => {
+    const el = boardContainerRef.current;
+    if (el) {
+      const handleWheel = (e) => {
+        if (el.scrollWidth > el.clientWidth) {
+          if (e.deltaY !== 0) {
+            e.preventDefault();
+            // Scroll direct. The browser's native/CSS scroll-behavior smooths this interaction!
+            el.scrollLeft += e.deltaY * 1.2;
+          }
+        }
+      };
+
+      el.addEventListener('scroll', checkScroll);
+      el.addEventListener('wheel', handleWheel, { passive: false });
+      window.addEventListener('resize', checkScroll);
+      checkScroll();
+
+      // Check again shortly to allow DOM elements to fully settle
+      const timer = setTimeout(checkScroll, 200);
+
+      return () => {
+        el.removeEventListener('scroll', checkScroll);
+        el.removeEventListener('wheel', handleWheel);
+        window.removeEventListener('resize', checkScroll);
+        clearTimeout(timer);
+      };
+    }
+  }, [selectedBoardId, departments]);
 
   // Supabase Fetch & Realtime
   const fetchData = async () => {
@@ -672,37 +723,70 @@ export default function App() {
               <button onClick={() => setSelectedBoardId(null)} className="glass-button text-sm py-2 px-4 flex items-center gap-2"><ArrowLeft size={16}/> Back</button>
             </div>
             
-            <div className="flex gap-6 overflow-x-auto pb-6 scrollbar-hide items-stretch min-h-[500px]">
-              <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-                <SortableContext items={currentBoard.employees.map(e => e.id)} strategy={horizontalListSortingStrategy}>
-                  {currentBoard.employees.map(emp => (
-                    <SortableEmployeeCard
-                      key={emp.id}
-                      employee={emp}
-                      isAdmin={isAdmin}
-                      onDelete={deleteEmployee}
-                      onEdit={(emp) => { setEditingEmployee(emp); setShowAddEmpModal(true); }}
-                      updateTask={updateTask}
-                      deleteTask={deleteTask}
-                      addTask={addTask}
-                      onTaskClick={(empId, taskId) => setSelectedTaskDetails({ empId, taskId })}
-                    />
-                  ))}
-                </SortableContext>
-                {currentBoard.employees.length === 0 && (
-                  <div className="w-[320px] flex-shrink-0 border-2 border-dashed border-white/10 rounded-2xl flex items-center justify-center text-slate-500 p-6 text-center">
-                    No agents on this board. Add one to get started.
-                  </div>
-                )}
-                <DragOverlay dropAnimation={defaultDropAnimationSideEffects({ duration: 250 })}>
-                  {activeDragItem?.type === 'Task' && (
-                    <SortableTaskItem task={activeDragItem.task} employeeId={activeDragItem.employeeId} updateTask={()=>{}} deleteTask={()=>{}} onTaskClick={()=>{}} />
+            <div className="relative group/board">
+              {/* Left Scroll Paddle */}
+              {canScrollLeft && (
+                <button
+                  onClick={() => {
+                    boardContainerRef.current?.scrollBy({ left: -340, behavior: 'smooth' });
+                  }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-slate-900/60 hover:bg-slate-900/90 text-brand-400 hover:text-brand-300 border border-white/10 hover:border-brand-500/50 flex items-center justify-center backdrop-blur-md shadow-[0_0_15px_rgba(0,0,0,0.5)] transition-all z-20 hover:scale-110 active:scale-95"
+                  title="Scroll Left"
+                  aria-label="Scroll left"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+              )}
+
+              {/* Right Scroll Paddle */}
+              {canScrollRight && (
+                <button
+                  onClick={() => {
+                    boardContainerRef.current?.scrollBy({ left: 340, behavior: 'smooth' });
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-slate-900/60 hover:bg-slate-900/90 text-brand-400 hover:text-brand-300 border border-white/10 hover:border-brand-500/50 flex items-center justify-center backdrop-blur-md shadow-[0_0_15px_rgba(0,0,0,0.5)] transition-all z-20 hover:scale-110 active:scale-95"
+                  title="Scroll Right"
+                  aria-label="Scroll right"
+                >
+                  <ChevronRight size={24} />
+                </button>
+              )}
+
+              <div 
+                ref={boardContainerRef}
+                className="flex gap-6 overflow-x-auto pb-6 custom-scrollbar items-stretch min-h-[500px]"
+              >
+                <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
+                  <SortableContext items={currentBoard.employees.map(e => e.id)} strategy={horizontalListSortingStrategy}>
+                    {currentBoard.employees.map(emp => (
+                      <SortableEmployeeCard
+                        key={emp.id}
+                        employee={emp}
+                        isAdmin={isAdmin}
+                        onDelete={deleteEmployee}
+                        onEdit={(emp) => { setEditingEmployee(emp); setShowAddEmpModal(true); }}
+                        updateTask={updateTask}
+                        deleteTask={deleteTask}
+                        addTask={addTask}
+                        onTaskClick={(empId, taskId) => setSelectedTaskDetails({ empId, taskId })}
+                      />
+                    ))}
+                  </SortableContext>
+                  {currentBoard.employees.length === 0 && (
+                    <div className="w-[320px] flex-shrink-0 border-2 border-dashed border-white/10 rounded-2xl flex items-center justify-center text-slate-500 p-6 text-center">
+                      No agents on this board. Add one to get started.
+                    </div>
                   )}
-                  {activeDragItem?.type === 'Employee' && (
-                    <SortableEmployeeCard employee={activeDragItem.employee} isAdmin={isAdmin} onDelete={()=>{}} onEdit={()=>{}} updateTask={()=>{}} deleteTask={()=>{}} addTask={()=>{}} onTaskClick={()=>{}} />
-                  )}
-                </DragOverlay>
-              </DndContext>
+                  <DragOverlay dropAnimation={defaultDropAnimationSideEffects({ duration: 250 })}>
+                    {activeDragItem?.type === 'Task' && (
+                      <SortableTaskItem task={activeDragItem.task} employeeId={activeDragItem.employeeId} updateTask={()=>{}} deleteTask={()=>{}} onTaskClick={()=>{}} />
+                    )}
+                    {activeDragItem?.type === 'Employee' && (
+                      <SortableEmployeeCard employee={activeDragItem.employee} isAdmin={isAdmin} onDelete={()=>{}} onEdit={()=>{}} updateTask={()=>{}} deleteTask={()=>{}} addTask={()=>{}} onTaskClick={()=>{}} />
+                    )}
+                  </DragOverlay>
+                </DndContext>
+              </div>
             </div>
           </div>
         )}

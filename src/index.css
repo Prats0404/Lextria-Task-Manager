@@ -63,3 +63,35 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Premium Sleek Scrollbar */
+.custom-scrollbar {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.4) rgba(255, 255, 255, 0.02);
+}
+.custom-scrollbar::-webkit-scrollbar {
+  height: 10px; /* Slightly thicker for better visibility and easier grab */
+  width: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.01);
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.35);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box; /* Floating scrollbar look */
+  box-shadow: inset 0 0 0 10px rgba(139, 92, 246, 0.35);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 58, 237, 0.7);
+  box-shadow: inset 0 0 0 10px rgba(124, 58, 237, 0.7), 0 0 12px rgba(124, 58, 237, 0.5);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:active {
+  background: rgba(167, 139, 250, 0.9);
+  box-shadow: inset 0 0 0 10px rgba(167, 139, 250, 0.9), 0 0 18px rgba(167, 139, 250, 0.8);
+}
