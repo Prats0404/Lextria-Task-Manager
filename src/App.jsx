@@ -225,6 +225,210 @@ const getBoardTaskStats = (board) => {
   return { total, completed, pct };
 };
 
+// --- SORTABLE DEPARTMENTS & BOARDS COMPONENTS ---
+function SortableDepartment({
+  dept,
+  isAdmin,
+  unlockedDepartments,
+  setSelectedDeptId,
+  setDeptToUnlock,
+  setDeptUnlockPassword,
+  setDeptUnlockError,
+  setEditingDepartment,
+  setShowAddDeptModal,
+  setDepartmentToDelete,
+  getDeptTaskStats,
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: dept.id, disabled: !isAdmin });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+    zIndex: isDragging ? 50 : 'auto',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`glass-card p-6 rounded-2xl hover:bg-white/10 transition-all group flex flex-col justify-between min-h-[160px] relative select-none ${
+        isAdmin ? 'cursor-grab active:cursor-grabbing border-brand-500/10 hover:border-brand-500/30' : 'cursor-pointer'
+      } ${isDragging ? 'border-brand-500 bg-white/10 ring-2 ring-brand-500/50 scale-[1.02] shadow-xl' : ''}`}
+      onClick={(e) => {
+        if (e.target.closest('button')) return;
+        if (isAdmin || !dept.password || unlockedDepartments.includes(dept.id)) {
+          setSelectedDeptId(dept.id);
+        } else {
+          setDeptToUnlock(dept);
+          setDeptUnlockPassword('');
+          setDeptUnlockError(false);
+        }
+      }}
+    >
+      <div>
+        <h3 className="text-xl font-bold text-white mb-2 flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 overflow-hidden text-ellipsis">
+            {isAdmin && <GripVertical className="text-slate-500/50 group-hover:text-slate-300 w-4 h-4 shrink-0" />}
+            <span className="truncate">{dept.name}</span>
+          </span>
+          {dept.password && <Lock size={16} className="text-slate-500 shrink-0" title="Password Protected" />}
+        </h3>
+        <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
+          <span>{dept.boards?.length || 0} Boards</span>
+          {(() => {
+            const stats = getDeptTaskStats(dept);
+            if (stats.total > 0) {
+              return <span className="font-semibold text-brand-400">{stats.completed}/{stats.total} ({stats.pct}%)</span>;
+            }
+            return <span>0 Tasks</span>;
+          })()}
+        </div>
+        {(() => {
+          const stats = getDeptTaskStats(dept);
+          if (stats.total > 0) {
+            return (
+              <div className="w-full bg-slate-800/50 rounded-full h-1">
+                <div className="bg-brand-500 h-1 rounded-full transition-all duration-500" style={{ width: `${stats.pct}%` }} />
+              </div>
+            );
+          }
+          return null;
+        })()}
+      </div>
+      <div className="flex justify-end gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
+        {isAdmin && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingDepartment(dept);
+                setShowAddDeptModal(true);
+              }}
+              className="p-2 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white"
+            >
+              <Edit2 size={16} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setDepartmentToDelete(dept);
+              }}
+              className="p-2 hover:bg-red-500/20 rounded-lg text-slate-300 hover:text-red-400"
+            >
+              <Trash2 size={16} />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SortableBoard({
+  board,
+  isAdmin,
+  setSelectedBoardId,
+  setEditingBoard,
+  setShowAddBoardModal,
+  setBoardToDelete,
+  getBoardTaskStats,
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: board.id, disabled: !isAdmin });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+    zIndex: isDragging ? 50 : 'auto',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`glass-card p-6 rounded-2xl hover:bg-white/10 transition-all group flex flex-col justify-between min-h-[160px] relative select-none ${
+        isAdmin ? 'cursor-grab active:cursor-grabbing border-brand-500/10 hover:border-brand-500/30' : 'cursor-pointer'
+      } ${isDragging ? 'border-brand-500 bg-white/10 ring-2 ring-brand-500/50 scale-[1.02] shadow-xl' : ''}`}
+      onClick={(e) => {
+        if (e.target.closest('button')) return;
+        setSelectedBoardId(board.id);
+      }}
+    >
+      <div>
+        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2 overflow-hidden text-ellipsis">
+          {isAdmin && <GripVertical className="text-slate-500/50 group-hover:text-slate-300 w-4 h-4 shrink-0" />}
+          <span className="truncate">{board.name}</span>
+        </h3>
+        <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
+          <span className="flex items-center gap-1"><Users size={12}/> {board.employees?.length || 0} Agents</span>
+          {(() => {
+            const stats = getBoardTaskStats(board);
+            if (stats.total > 0) {
+              return <span className="font-semibold text-brand-400">{stats.completed}/{stats.total} ({stats.pct}%)</span>;
+            }
+            return <span>0 Tasks</span>;
+          })()}
+        </div>
+        {(() => {
+          const stats = getBoardTaskStats(board);
+          if (stats.total > 0) {
+            return (
+              <div className="w-full bg-slate-800/50 rounded-full h-1">
+                <div className="bg-brand-500 h-1 rounded-full transition-all duration-500" style={{ width: `${stats.pct}%` }} />
+              </div>
+            );
+          }
+          return null;
+        })()}
+      </div>
+      <div className="flex justify-end gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
+        {isAdmin && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingBoard(board);
+                setShowAddBoardModal(true);
+              }}
+              className="p-2 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white"
+            >
+              <Edit2 size={16} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setBoardToDelete(board);
+              }}
+              className="p-2 hover:bg-red-500/20 rounded-lg text-slate-300 hover:text-red-400"
+            >
+              <Trash2 size={16} />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- MAIN APP COMPONENT ---
 export default function App() {
   const [departments, setDepartments] = useState([]);
@@ -533,8 +737,8 @@ export default function App() {
 
   // Supabase Fetch & Realtime
   const fetchData = async () => {
-    const { data: deptData } = await supabase.from('departments').select('*').order('created_at', { ascending: true });
-    const { data: boardData } = await supabase.from('boards').select('*').order('created_at', { ascending: true });
+    const { data: deptData } = await supabase.from('departments').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
+    const { data: boardData } = await supabase.from('boards').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
     const { data: agentData } = await supabase.from('agents').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
     const { data: taskData } = await supabase.from('tasks').select('*').order('created_at', { ascending: true });
 
@@ -800,6 +1004,51 @@ export default function App() {
     }
   };
 
+  const handleDepartmentDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setDepartments(prev => {
+      const oldIndex = prev.findIndex(d => d.id === active.id);
+      const newIndex = prev.findIndex(d => d.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+
+      const updatedDepts = arrayMove(prev, oldIndex, newIndex);
+
+      // Asynchronously update position in Supabase
+      updatedDepts.forEach((dept, index) => {
+        supabase.from('departments').update({ position: index }).eq('id', dept.id).then();
+      });
+
+      return updatedDepts;
+    });
+  };
+
+  const handleBoardDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setDepartments(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const dept = next.find(d => d.id === selectedDeptId);
+      if (!dept) return prev;
+
+      const oldIndex = dept.boards.findIndex(b => b.id === active.id);
+      const newIndex = dept.boards.findIndex(b => b.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+
+      const updatedBoards = arrayMove(dept.boards, oldIndex, newIndex);
+      dept.boards = updatedBoards;
+
+      // Asynchronously update position in Supabase
+      updatedBoards.forEach((board, index) => {
+        supabase.from('boards').update({ position: index }).eq('id', board.id).then();
+      });
+
+      return next;
+    });
+  };
+
   // --- RENDER HELPERS ---
   const currentDept = selectedDeptId ? departments.find(d => d.id === selectedDeptId) : null;
   const currentBoard = currentDept && selectedBoardId ? currentDept.boards.find(b => b.id === selectedBoardId) : null;
@@ -921,64 +1170,33 @@ export default function App() {
         {!selectedDeptId && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2"><Building2 className="text-brand-400"/> Select a Department</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {departments.map(dept => (
-                <div 
-                  key={dept.id} 
-                  className="glass-card p-6 rounded-2xl hover:bg-white/10 transition-all cursor-pointer group flex flex-col justify-between min-h-[160px]"
-                  onClick={() => {
-                    if (isAdmin || !dept.password || unlockedDepartments.includes(dept.id)) {
-                      setSelectedDeptId(dept.id);
-                    } else {
-                      setDeptToUnlock(dept);
-                      setDeptUnlockPassword('');
-                      setDeptUnlockError(false);
-                    }
-                  }}
-                >
-                  <div>
-                    <h3 className="text-xl font-bold text-white mb-2 flex items-center justify-between">
-                      {dept.name}
-                      {dept.password && <Lock size={16} className="text-slate-500" title="Password Protected" />}
-                    </h3>
-                    <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
-                      <span>{dept.boards.length} Boards</span>
-                      {(() => {
-                        const stats = getDeptTaskStats(dept);
-                        if (stats.total > 0) {
-                          return <span className="font-semibold text-brand-400">{stats.completed}/{stats.total} ({stats.pct}%)</span>;
-                        }
-                        return <span>0 Tasks</span>;
-                      })()}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDepartmentDragEnd}>
+              <SortableContext items={departments.map(d => d.id)} strategy={rectSortingStrategy}>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {departments.map(dept => (
+                    <SortableDepartment
+                      key={dept.id}
+                      dept={dept}
+                      isAdmin={isAdmin}
+                      unlockedDepartments={unlockedDepartments}
+                      setSelectedDeptId={setSelectedDeptId}
+                      setDeptToUnlock={setDeptToUnlock}
+                      setDeptUnlockPassword={setDeptUnlockPassword}
+                      setDeptUnlockError={setDeptUnlockError}
+                      setEditingDepartment={setEditingDepartment}
+                      setShowAddDeptModal={setShowAddDeptModal}
+                      setDepartmentToDelete={setDepartmentToDelete}
+                      getDeptTaskStats={getDeptTaskStats}
+                    />
+                  ))}
+                  {departments.length === 0 && (
+                    <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-white/10 rounded-2xl">
+                      No departments found. Add one to get started.
                     </div>
-                    {(() => {
-                      const stats = getDeptTaskStats(dept);
-                      if (stats.total > 0) {
-                        return (
-                          <div className="w-full bg-slate-800/50 rounded-full h-1">
-                            <div className="bg-brand-500 h-1 rounded-full transition-all duration-500" style={{ width: `${stats.pct}%` }} />
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                  <div className="flex justify-end gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isAdmin && (
-                      <>
-                        <button onClick={(e) => { e.stopPropagation(); setEditingDepartment(dept); setShowAddDeptModal(true); }} className="p-2 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white"><Edit2 size={16}/></button>
-                        <button onClick={(e) => { e.stopPropagation(); setDepartmentToDelete(dept); }} className="p-2 hover:bg-red-500/20 rounded-lg text-slate-300 hover:text-red-400"><Trash2 size={16}/></button>
-                      </>
-                    )}
-                  </div>
+                  )}
                 </div>
-              ))}
-              {departments.length === 0 && (
-                <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-white/10 rounded-2xl">
-                  No departments found. Add one to get started.
-                </div>
-              )}
-            </div>
+              </SortableContext>
+            </DndContext>
           </div>
         )}
 
@@ -989,53 +1207,29 @@ export default function App() {
               <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Layout className="text-brand-400"/> Boards in {currentDept.name}</h2>
               <button onClick={() => setSelectedDeptId(null)} className="glass-button text-sm py-2 px-4 flex items-center gap-2"><ArrowLeft size={16}/> Back</button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {currentDept.boards.map(board => (
-                <div 
-                  key={board.id} 
-                  className="glass-card p-6 rounded-2xl hover:bg-white/10 transition-all cursor-pointer group flex flex-col justify-between min-h-[160px]"
-                  onClick={() => setSelectedBoardId(board.id)}
-                >
-                  <div>
-                    <h3 className="text-xl font-bold text-white mb-2">{board.name}</h3>
-                    <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
-                      <span className="flex items-center gap-1"><Users size={12}/> {board.employees.length} Agents</span>
-                      {(() => {
-                        const stats = getBoardTaskStats(board);
-                        if (stats.total > 0) {
-                          return <span className="font-semibold text-brand-400">{stats.completed}/{stats.total} ({stats.pct}%)</span>;
-                        }
-                        return <span>0 Tasks</span>;
-                      })()}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleBoardDragEnd}>
+              <SortableContext items={currentDept.boards.map(b => b.id)} strategy={rectSortingStrategy}>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {currentDept.boards.map(board => (
+                    <SortableBoard
+                      key={board.id}
+                      board={board}
+                      isAdmin={isAdmin}
+                      setSelectedBoardId={setSelectedBoardId}
+                      setEditingBoard={setEditingBoard}
+                      setShowAddBoardModal={setShowAddBoardModal}
+                      setBoardToDelete={setBoardToDelete}
+                      getBoardTaskStats={getBoardTaskStats}
+                    />
+                  ))}
+                  {currentDept.boards.length === 0 && (
+                    <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-white/10 rounded-2xl">
+                      No boards found in this department.
                     </div>
-                    {(() => {
-                      const stats = getBoardTaskStats(board);
-                      if (stats.total > 0) {
-                        return (
-                          <div className="w-full bg-slate-800/50 rounded-full h-1">
-                            <div className="bg-brand-500 h-1 rounded-full transition-all duration-500" style={{ width: `${stats.pct}%` }} />
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                  <div className="flex justify-end gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isAdmin && (
-                      <>
-                        <button onClick={(e) => { e.stopPropagation(); setEditingBoard(board); setShowAddBoardModal(true); }} className="p-2 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white"><Edit2 size={16}/></button>
-                        <button onClick={(e) => { e.stopPropagation(); setBoardToDelete(board); }} className="p-2 hover:bg-red-500/20 rounded-lg text-slate-300 hover:text-red-400"><Trash2 size={16}/></button>
-                      </>
-                    )}
-                  </div>
+                  )}
                 </div>
-              ))}
-              {currentDept.boards.length === 0 && (
-                <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-white/10 rounded-2xl">
-                  No boards found in this department.
-                </div>
-              )}
-            </div>
+              </SortableContext>
+            </DndContext>
           </div>
         )}
 
