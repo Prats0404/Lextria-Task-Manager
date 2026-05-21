@@ -23,7 +23,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
-  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft
+  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw
 } from 'lucide-react';
 
 // --- INITIAL DATA & UTILS ---
@@ -115,14 +115,11 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
   const totalTasks = employee.tasks.length;
   const progress = totalTasks === 0 ? 0 : Math.round((tasksCompleted / totalTasks) * 100);
 
-  const sortedTasks = [...employee.tasks].sort((a, b) => {
-    if (a.completed && !b.completed) return 1;
-    if (!a.completed && b.completed) return -1;
-    if (!a.completed && !b.completed) {
-      const pVals = { High: 3, Medium: 2, Low: 1 };
-      return (pVals[b.priority] || 0) - (pVals[a.priority] || 0);
-    }
-    return 0;
+  const activeTasks = employee.tasks.filter(t => !t.completed);
+
+  const sortedTasks = [...activeTasks].sort((a, b) => {
+    const pVals = { High: 3, Medium: 2, Low: 1 };
+    return (pVals[b.priority] || 0) - (pVals[a.priority] || 0);
   });
 
   return (
@@ -466,6 +463,8 @@ export default function App() {
   const [localDescription, setLocalDescription] = useState('');
   const [localDueDate, setLocalDueDate] = useState('');
   const [localReminderTime, setLocalReminderTime] = useState('');
+  const [showHistorySidebar, setShowHistorySidebar] = useState(false);
+  const [searchHistoryQuery, setSearchHistoryQuery] = useState('');
 
   // Dynamic toast reminder states & checker
   const [notifications, setNotifications] = useState([]);
@@ -1065,6 +1064,30 @@ export default function App() {
     return { emp, task };
   }, [selectedTaskDetails, currentBoard]);
 
+  const completedTasks = useMemo(() => {
+    if (!currentBoard) return [];
+    const list = [];
+    currentBoard.employees?.forEach(emp => {
+      emp.tasks?.forEach(task => {
+        if (task.completed) {
+          list.push({ task, emp });
+        }
+      });
+    });
+    // Sort in reverse chronological order (latest created at the top)
+    return list.sort((a, b) => new Date(b.task.created_at || 0) - new Date(a.task.created_at || 0));
+  }, [currentBoard]);
+
+  const filteredCompletedTasks = useMemo(() => {
+    if (!searchHistoryQuery.trim()) return completedTasks;
+    const query = searchHistoryQuery.toLowerCase();
+    return completedTasks.filter(({ task, emp }) => 
+      task.title.toLowerCase().includes(query) || 
+      (task.description && task.description.toLowerCase().includes(query)) ||
+      emp.name.toLowerCase().includes(query)
+    );
+  }, [completedTasks, searchHistoryQuery]);
+
   // Synchronize local modal editor state when the selected task changes
   useEffect(() => {
     if (activeTaskDetails) {
@@ -1240,9 +1263,23 @@ export default function App() {
         {/* LEVEL 3: AGENTS KANBAN VIEW */}
         {selectedBoardId && currentBoard && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300 h-full">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
               <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Users className="text-brand-400"/> Agents: {currentBoard.name}</h2>
-              <button onClick={() => setSelectedBoardId(null)} className="glass-button text-sm py-2 px-4 flex items-center gap-2"><ArrowLeft size={16}/> Back</button>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setShowHistorySidebar(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-slate-300 hover:text-white transition-all shadow-md active:scale-95 cursor-pointer"
+                >
+                  <History size={16} className="text-slate-400" />
+                  <span>History</span>
+                  {completedTasks.length > 0 && (
+                    <span className="bg-brand-500/20 text-brand-300 border border-brand-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                      {completedTasks.length}
+                    </span>
+                  )}
+                </button>
+                <button onClick={() => setSelectedBoardId(null)} className="glass-button text-sm py-2 px-4 flex items-center gap-2"><ArrowLeft size={16}/> Back</button>
+              </div>
             </div>
             
             <div className="relative group/board">
@@ -1649,6 +1686,88 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      {/* Task History Sidebar */}
+      {showHistorySidebar && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          {/* Backdrop with a smooth dark blur */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity animate-in fade-in duration-200" onClick={() => setShowHistorySidebar(false)} />
+          
+          <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+            <div className="w-screen max-w-md bg-[#120a21]/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+              {/* Sidebar Header */}
+              <div className="p-5 border-b border-white/10 flex items-center justify-between bg-white/5 rounded-tl-2xl">
+                <div className="flex items-center gap-2">
+                  <History className="text-brand-400 animate-pulse" size={20} />
+                  <h2 className="text-lg font-bold text-white">Completed Task History</h2>
+                </div>
+                <button onClick={() => setShowHistorySidebar(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Search Box */}
+              <div className="p-4 border-b border-white/10 bg-white/5">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 text-slate-400" size={16} />
+                  <input
+                    type="text"
+                    value={searchHistoryQuery}
+                    onChange={(e) => setSearchHistoryQuery(e.target.value)}
+                    placeholder="Search completed tasks..."
+                    className="glass-input w-full pl-9 pr-4 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Sidebar Content (Completed Tasks List) */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {filteredCompletedTasks.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-500 py-12 text-center">
+                    <History size={40} className="text-slate-600 mb-2" />
+                    <p className="text-sm">No completed tasks found</p>
+                  </div>
+                ) : (
+                  filteredCompletedTasks.map(({ task, emp }) => (
+                    <div key={task.id} className="glass-card p-4 border border-white/10 rounded-xl bg-white/5 flex flex-col gap-2 hover:bg-white/10 transition-all">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-semibold text-white line-through decoration-slate-500 truncate">{task.title}</h4>
+                          {task.description && (
+                            <p className="text-xs text-slate-400 mt-1 line-clamp-2">{task.description}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            // Uncomplete the task
+                            updateTask(emp.id, task.id, { completed: false });
+                          }}
+                          className="flex-shrink-0 p-1.5 rounded-lg hover:bg-brand-500/20 text-slate-400 hover:text-brand-400 transition-colors cursor-pointer"
+                          title="Restore task to board"
+                        >
+                          <RotateCcw size={14} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-white/5 pt-2 mt-1">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-5 h-5 rounded-full ${emp.color} flex items-center justify-center text-[9px] font-bold shadow`}>
+                            {getInitials(emp.name)}
+                          </div>
+                          <span className="text-[11px] text-slate-300 truncate max-w-[120px]">{emp.name}</span>
+                        </div>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded border border-white/10 bg-white/5 text-slate-400 uppercase tracking-wider font-semibold">
+                          {task.priority}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
