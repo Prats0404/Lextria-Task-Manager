@@ -229,6 +229,82 @@ export default function App() {
   const [localDueDate, setLocalDueDate] = useState('');
   const [localReminderTime, setLocalReminderTime] = useState('');
 
+  // Dynamic toast reminder states & checker
+  const [notifications, setNotifications] = useState([]);
+  const triggeredRemindersRef = useRef({}); // Format: { [taskId]: 'YYYY-MM-DD' }
+
+  const dismissNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const triggerNotification = (task, emp, board) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    const newNotif = {
+      id,
+      taskTitle: task.title,
+      employeeName: emp.name,
+      boardName: board.name,
+      time: task.reminderTime
+    };
+
+    setNotifications(prev => [...prev, newNotif]);
+
+    // Auto-remove after 8 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 8000);
+  };
+
+  const checkReminders = () => {
+    const now = new Date();
+    
+    // YYYY-MM-DD
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+    
+    // HH:MM
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const currentTimeStr = `${hours}:${minutes}`;
+
+    departments.forEach(dept => {
+      dept.boards?.forEach(board => {
+        board.employees?.forEach(emp => {
+          emp.tasks?.forEach(task => {
+            if (task.reminderTime) {
+              const taskReminder = task.reminderTime.trim().substring(0, 5); // HH:MM
+              
+              if (taskReminder === currentTimeStr) {
+                // If it has a due date, check if due date matches today
+                const isDueToday = !task.dueDate || task.dueDate === todayStr;
+                
+                if (isDueToday) {
+                  const alreadyTriggered = triggeredRemindersRef.current[task.id] === todayStr;
+                  
+                  if (!alreadyTriggered) {
+                    triggeredRemindersRef.current[task.id] = todayStr;
+                    triggerNotification(task, emp, board);
+                  }
+                }
+              }
+            }
+          });
+        });
+      });
+    });
+  };
+
+  // Run reminder checker on load and tick every 8 seconds
+  useEffect(() => {
+    if (departments.length === 0) return;
+    
+    checkReminders();
+    const interval = setInterval(checkReminders, 8000);
+    return () => clearInterval(interval);
+  }, [departments]);
+
   // Scrollbar and wheel scroll states & helpers
   const boardContainerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -425,7 +501,13 @@ export default function App() {
     if (updates.completed !== undefined) dbUpdates.completed = updates.completed;
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
-    if (updates.reminderTime !== undefined) dbUpdates.reminder_time = updates.reminderTime;
+    if (updates.reminderTime !== undefined) {
+      dbUpdates.reminder_time = updates.reminderTime;
+      // Reset reminder trigger state so if user sets it to the current time, it triggers immediately
+      if (triggeredRemindersRef.current) {
+        delete triggeredRemindersRef.current[taskId];
+      }
+    }
     
     await supabase.from('tasks').update(dbUpdates).eq('id', taskId);
   };
@@ -1059,6 +1141,53 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Toast Notification Popups */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        {notifications.map(notif => (
+          <div 
+            key={notif.id}
+            className="pointer-events-auto glass-card border border-brand-500/40 p-4 rounded-xl shadow-[0_10px_30px_rgba(124,58,237,0.25)] flex items-start gap-3 animate-in slide-in-from-bottom-6 fade-in duration-300 relative overflow-hidden bg-slate-950/80 backdrop-blur-xl"
+          >
+            {/* Pulsing indicator light */}
+            <div className="absolute top-0 left-0 w-[4px] h-full bg-brand-500 shadow-[0_0_8px_#8b5cf6]" />
+            
+            {/* Bell icon container with a gorgeous pulse */}
+            <div className="flex-shrink-0 bg-brand-500/20 p-2 rounded-lg text-brand-400 animate-pulse mt-0.5 border border-brand-500/30">
+              <Bell size={18} />
+            </div>
+
+            {/* Notification details */}
+            <div className="flex-1 min-w-0 pr-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-brand-400 tracking-wider uppercase">Reminder</span>
+                <span className="text-[10px] text-slate-400 bg-white/5 px-1.5 py-0.5 rounded">{notif.time}</span>
+              </div>
+              <h4 className="text-sm font-bold text-white truncate mb-1">{notif.taskTitle}</h4>
+              <p className="text-xs text-slate-300 flex items-center gap-1">
+                <Users size={12} className="text-slate-400" />
+                <span>Assigned to: <strong className="text-brand-300">{notif.employeeName}</strong></span>
+              </p>
+            </div>
+
+            {/* Close button */}
+            <button 
+              onClick={() => dismissNotification(notif.id)}
+              className="text-slate-400 hover:text-white hover:bg-white/5 p-1 rounded-md transition-colors flex-shrink-0"
+              aria-label="Dismiss reminder"
+            >
+              <X size={14} />
+            </button>
+
+            {/* Draining visual progress bar */}
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/5">
+              <div 
+                className="h-full bg-gradient-to-r from-brand-500 to-accent-400 transition-all duration-[8000ms] ease-linear"
+                style={{ width: '0%', animation: 'shrinkBar 8s linear forwards' }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
