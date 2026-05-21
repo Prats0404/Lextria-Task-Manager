@@ -232,6 +232,40 @@ export default function App() {
   // Dynamic toast reminder states & checker
   const [notifications, setNotifications] = useState([]);
   const triggeredRemindersRef = useRef({}); // Format: { [taskId]: 'YYYY-MM-DD' }
+  const titleFlashIntervalRef = useRef(null);
+
+  const [notificationPermission, setNotificationPermission] = useState('default');
+
+  // Track and synchronize desktop notification permission state on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
+
+  const requestNotificationPermission = () => {
+    if (!('Notification' in window)) {
+      alert('This browser does not support desktop notifications.');
+      return;
+    }
+    
+    Notification.requestPermission().then(permission => {
+      setNotificationPermission(permission);
+      if (permission === 'granted') {
+        playNotificationSound();
+        try {
+          new Notification('🔔 Lextria Alerts Active!', {
+            body: 'You will now receive task reminders in this browser.',
+            icon: window.location.origin + '/favicon.svg'
+          });
+        } catch (e) {
+          console.warn('Test notification dispatch failed:', e);
+        }
+      }
+    }).catch(err => {
+      console.error('Permission request failed:', err);
+    });
+  };
 
   const dismissNotification = (id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
@@ -270,7 +304,49 @@ export default function App() {
     }
   };
 
-  const triggerNotification = (task, emp, board) => {
+  // Tab Title Flashing Logic
+  const startTitleFlash = (taskTitle) => {
+    if (titleFlashIntervalRef.current) clearInterval(titleFlashIntervalRef.current);
+    
+    let isOriginal = false;
+    document.title = `🔔 Reminder: ${taskTitle}`;
+    
+    titleFlashIntervalRef.current = setInterval(() => {
+      document.title = isOriginal ? `🔔 Reminder: ${taskTitle}` : 'Lextria Task Dashboard - Premium Office Task Management';
+      isOriginal = !isOriginal;
+    }, 1200);
+  };
+
+  const stopTitleFlash = () => {
+    if (titleFlashIntervalRef.current) {
+      clearInterval(titleFlashIntervalRef.current);
+      titleFlashIntervalRef.current = null;
+    }
+    document.title = 'Lextria Task Dashboard - Premium Office Task Management';
+  };
+
+  // Stop flashing when tab is visible / window is focused
+  useEffect(() => {
+    const handleFocus = () => {
+      stopTitleFlash();
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        stopTitleFlash();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (titleFlashIntervalRef.current) clearInterval(titleFlashIntervalRef.current);
+    };
+  }, []);
+
+  const triggerNotification = (task, emp, board, dept) => {
     const id = Math.random().toString(36).substring(2, 9);
     const newNotif = {
       id,
@@ -285,7 +361,37 @@ export default function App() {
     // Play default synthesized premium chime sound
     playNotificationSound();
 
-    // Auto-remove after 8 seconds
+    // If tab is in the background or minimized, trigger HTML5 native desktop notifications & tab title flashing
+    if (document.hidden || !document.hasFocus()) {
+      startTitleFlash(task.title);
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          const options = {
+            body: `Assigned to ${emp.name} in ${board.name} (${dept.name}).`,
+            icon: window.location.origin + '/favicon.svg',
+            tag: task.id,
+            requireInteraction: true // Keep open until actioned
+          };
+          
+          const nativeNotification = new Notification(`🔔 Task Reminder: ${task.title}`, options);
+          
+          nativeNotification.onclick = () => {
+            window.focus();
+            // Deep-link to task details
+            setSelectedDeptId(dept.id);
+            setSelectedBoardId(board.id);
+            setSelectedTaskDetails({ empId: emp.id, taskId: task.id });
+            nativeNotification.close();
+            stopTitleFlash();
+          };
+        } catch (e) {
+          console.warn('Native Notification failed to initialize:', e);
+        }
+      }
+    }
+
+    // Auto-remove toast after 8 seconds
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 8000);
@@ -321,7 +427,7 @@ export default function App() {
                   
                   if (!alreadyTriggered) {
                     triggeredRemindersRef.current[task.id] = todayStr;
-                    triggerNotification(task, emp, board);
+                    triggerNotification(task, emp, board, dept);
                   }
                 }
               }
@@ -448,7 +554,7 @@ export default function App() {
 
   const handleAdminLogin = (e) => {
     e.preventDefault();
-    if (adminPassword === 'Lextria@334') {
+    if (adminPassword === '334') {
       setIsAdmin(true);
       setShowAdminModal(false);
       setAdminPassword('');
@@ -708,6 +814,33 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-4">
+            {notificationPermission === 'default' && (
+              <button 
+                onClick={requestNotificationPermission} 
+                className="flex items-center gap-2 text-xs font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30 px-3 py-1.5 rounded-xl hover:bg-brand-500/30 transition-all shadow-[0_0_10px_rgba(124,58,237,0.15)] hover:shadow-[0_0_15px_rgba(124,58,237,0.3)] animate-pulse"
+              >
+                <Bell size={14} /> Enable Desktop Alerts
+              </button>
+            )}
+            
+            {notificationPermission === 'denied' && (
+              <span 
+                className="flex items-center gap-1.5 text-[11px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-xl cursor-help"
+                title="Notifications blocked. Please enable them in your browser site settings to receive reminders in other tabs."
+              >
+                <AlertCircle size={12} /> Alerts Blocked
+              </span>
+            )}
+
+            {notificationPermission === 'granted' && (
+              <span 
+                className="flex items-center gap-1.5 text-[11px] font-medium bg-green-500/10 text-green-400 border border-green-500/20 px-2.5 py-1 rounded-xl cursor-default"
+                title="Desktop alerts are active!"
+              >
+                <CheckCircle2 size={12} /> Alerts Active
+              </span>
+            )}
+
             <button onClick={toggleAdmin} className={`p-2.5 rounded-xl transition-all ${isAdmin ? 'bg-brand-500/20 text-brand-300 shadow-[0_0_15px_rgba(124,58,237,0.3)]' : 'hover:bg-white/10 text-slate-300'}`} title="Admin Controls">
               {isAdmin ? <Unlock size={20} /> : <Lock size={20} />}
             </button>
@@ -1169,6 +1302,13 @@ export default function App() {
                     onChange={(e) => {
                       setLocalReminderTime(e.target.value);
                       updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { reminderTime: e.target.value });
+                      if ('Notification' in window && Notification.permission === 'default') {
+                        Notification.requestPermission().then(permission => {
+                          setNotificationPermission(permission);
+                        }).catch(err => {
+                          console.warn('Desktop notifications permission request failed', err);
+                        });
+                      }
                     }}
                   />
                 </div>
