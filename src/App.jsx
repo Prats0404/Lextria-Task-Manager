@@ -192,6 +192,39 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
   );
 }
 
+// --- TASK COMPILATION HELPERS ---
+const getDeptTaskStats = (dept) => {
+  let total = 0;
+  let completed = 0;
+  dept.boards?.forEach(board => {
+    board.employees?.forEach(emp => {
+      emp.tasks?.forEach(task => {
+        total++;
+        if (task.completed) {
+          completed++;
+        }
+      });
+    });
+  });
+  const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
+  return { total, completed, pct };
+};
+
+const getBoardTaskStats = (board) => {
+  let total = 0;
+  let completed = 0;
+  board.employees?.forEach(emp => {
+    emp.tasks?.forEach(task => {
+      total++;
+      if (task.completed) {
+        completed++;
+      }
+    });
+  });
+  const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
+  return { total, completed, pct };
+};
+
 // --- MAIN APP COMPONENT ---
 export default function App() {
   const [departments, setDepartments] = useState([]);
@@ -908,7 +941,27 @@ export default function App() {
                       {dept.name}
                       {dept.password && <Lock size={16} className="text-slate-500" title="Password Protected" />}
                     </h3>
-                    <p className="text-slate-400 text-sm">{dept.boards.length} Boards</p>
+                    <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
+                      <span>{dept.boards.length} Boards</span>
+                      {(() => {
+                        const stats = getDeptTaskStats(dept);
+                        if (stats.total > 0) {
+                          return <span className="font-semibold text-brand-400">{stats.completed}/{stats.total} ({stats.pct}%)</span>;
+                        }
+                        return <span>0 Tasks</span>;
+                      })()}
+                    </div>
+                    {(() => {
+                      const stats = getDeptTaskStats(dept);
+                      if (stats.total > 0) {
+                        return (
+                          <div className="w-full bg-slate-800/50 rounded-full h-1">
+                            <div className="bg-brand-500 h-1 rounded-full transition-all duration-500" style={{ width: `${stats.pct}%` }} />
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   <div className="flex justify-end gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
                     {isAdmin && (
@@ -945,7 +998,27 @@ export default function App() {
                 >
                   <div>
                     <h3 className="text-xl font-bold text-white mb-2">{board.name}</h3>
-                    <p className="text-slate-400 text-sm flex items-center gap-1"><Users size={14}/> {board.employees.length} Agents</p>
+                    <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
+                      <span className="flex items-center gap-1"><Users size={12}/> {board.employees.length} Agents</span>
+                      {(() => {
+                        const stats = getBoardTaskStats(board);
+                        if (stats.total > 0) {
+                          return <span className="font-semibold text-brand-400">{stats.completed}/{stats.total} ({stats.pct}%)</span>;
+                        }
+                        return <span>0 Tasks</span>;
+                      })()}
+                    </div>
+                    {(() => {
+                      const stats = getBoardTaskStats(board);
+                      if (stats.total > 0) {
+                        return (
+                          <div className="w-full bg-slate-800/50 rounded-full h-1">
+                            <div className="bg-brand-500 h-1 rounded-full transition-all duration-500" style={{ width: `${stats.pct}%` }} />
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   <div className="flex justify-end gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
                     {isAdmin && (
