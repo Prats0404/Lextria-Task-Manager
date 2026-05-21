@@ -1114,9 +1114,11 @@ export default function App() {
       <nav className="glass-card rounded-none border-t-0 border-x-0 border-b-white/10 px-6 py-4 sticky top-0 z-40 backdrop-blur-2xl bg-[#0a0a1a]/70">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-3 whitespace-nowrap">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/30 text-white font-bold text-xl">
-              ⚡
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="Lextria Logo" 
+              className="w-10 h-10 rounded-full object-cover shadow-lg border border-white/15"
+            />
             <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
               Lextria Task Manager
             </h1>
