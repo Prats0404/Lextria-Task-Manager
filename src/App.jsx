@@ -237,6 +237,39 @@ export default function App() {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
+  const playNotificationSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      
+      const playChimeNode = (freq, startTime, duration) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startTime);
+        
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(0.12, startTime + 0.02); // 12% pleasant volume
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+
+      const now = ctx.currentTime;
+      // High-end futuristic warm double-chime chime
+      playChimeNode(880, now, 0.15); // A5 note
+      playChimeNode(1109.73, now + 0.08, 0.3); // C#6 note
+    } catch (error) {
+      console.warn('AudioContext playback failed', error);
+    }
+  };
+
   const triggerNotification = (task, emp, board) => {
     const id = Math.random().toString(36).substring(2, 9);
     const newNotif = {
@@ -248,6 +281,9 @@ export default function App() {
     };
 
     setNotifications(prev => [...prev, newNotif]);
+
+    // Play default synthesized premium chime sound
+    playNotificationSound();
 
     // Auto-remove after 8 seconds
     setTimeout(() => {
