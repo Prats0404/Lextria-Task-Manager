@@ -263,7 +263,7 @@ function SortableDepartment({
       } ${isDragging ? 'border-brand-500 bg-white/10 ring-2 ring-brand-500/50 scale-[1.02] shadow-xl' : ''}`}
       onClick={(e) => {
         if (e.target.closest('button')) return;
-        if (isAdmin || !dept.password || unlockedDepartments.includes(dept.id)) {
+        if (isAdmin || !dept.has_password || unlockedDepartments.includes(dept.id)) {
           setSelectedDeptId(dept.id);
         } else {
           setDeptToUnlock(dept);
@@ -278,7 +278,7 @@ function SortableDepartment({
             {isAdmin && <GripVertical className="text-slate-500/50 group-hover:text-slate-300 w-4 h-4 shrink-0" />}
             <span className="truncate">{dept.name}</span>
           </span>
-          {dept.password && <Lock size={16} className="text-slate-500 shrink-0" title="Password Protected" />}
+          {dept.has_password && <Lock size={16} className="text-slate-500 shrink-0" title="Password Protected" />}
         </h3>
         <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
           <span>{dept.boards?.length || 0} Boards</span>
@@ -807,9 +807,27 @@ export default function App() {
     const name = formData.get('name');
     const password = formData.get('password') || '';
     if (editingDepartment) {
-      await supabase.from('departments').update({ name, password }).eq('id', editingDepartment.id);
+      const removePassword = formData.get('remove_password') === 'on';
+      let changePassword = false;
+      let newPassword = '';
+      if (removePassword) {
+        changePassword = true;
+        newPassword = '';
+      } else if (password !== '') {
+        changePassword = true;
+        newPassword = password;
+      }
+      await supabase.rpc('update_department', {
+        dept_id: editingDepartment.id,
+        dept_name: name,
+        input_password: newPassword,
+        change_password: changePassword
+      });
     } else {
-      await supabase.from('departments').insert([{ name, password }]);
+      await supabase.rpc('create_department_with_password', {
+        dept_name: name,
+        input_password: password
+      });
     }
     setShowAddDeptModal(false);
     setEditingDepartment(null);
@@ -1394,9 +1412,13 @@ export default function App() {
             <button onClick={() => setDeptToUnlock(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={20} /></button>
             <h2 className="text-xl font-bold mb-4 text-white flex items-center gap-2"><Lock size={20} className="text-brand-400"/> Department Access</h2>
             <p className="text-slate-400 text-sm mb-4">Enter the password to access {deptToUnlock.name}.</p>
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
-              if (deptUnlockPassword === deptToUnlock.password) {
+              const { data: isValid, error } = await supabase.rpc('verify_department_password', {
+                dept_id: deptToUnlock.id,
+                input_password: deptUnlockPassword
+              });
+              if (!error && isValid) {
                 setUnlockedDepartments([...unlockedDepartments, deptToUnlock.id]);
                 setSelectedDeptId(deptToUnlock.id);
                 setDeptToUnlock(null);
@@ -1426,7 +1448,29 @@ export default function App() {
               {isAdmin && (
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Access Password (Optional)</label>
-                  <input type="password" name="password" defaultValue={editingDepartment?.password || ''} className="glass-input w-full" placeholder="Leave empty for public access" />
+                  <input
+                    type="password"
+                    name="password"
+                    className="glass-input w-full"
+                    placeholder={
+                      editingDepartment?.has_password 
+                        ? "•••••••• (leave blank to keep existing)" 
+                        : "Leave empty for public access"
+                    }
+                  />
+                  {editingDepartment?.has_password && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="checkbox"
+                        name="remove_password"
+                        id="remove_password"
+                        className="rounded border-slate-700 bg-slate-800 text-brand-500 focus:ring-brand-500 cursor-pointer"
+                      />
+                      <label htmlFor="remove_password" className="text-xs text-slate-400 cursor-pointer select-none">
+                        Remove password protection (make department public)
+                      </label>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="pt-4 flex justify-end space-x-3">
