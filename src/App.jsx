@@ -463,6 +463,7 @@ export default function App() {
 
   // Local states for the task details editor to ensure buttery-smooth typing & inputting without network lag
   const [localTitle, setLocalTitle] = useState('');
+  const [localDescription, setLocalDescription] = useState('');
   const [localDueDate, setLocalDueDate] = useState('');
   const [localReminderTime, setLocalReminderTime] = useState('');
 
@@ -877,6 +878,7 @@ export default function App() {
     // API
     const dbUpdates = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.completed !== undefined) dbUpdates.completed = updates.completed;
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
@@ -1067,10 +1069,12 @@ export default function App() {
   useEffect(() => {
     if (activeTaskDetails) {
       setLocalTitle(activeTaskDetails.task.title || '');
+      setLocalDescription(activeTaskDetails.task.description || '');
       setLocalDueDate(activeTaskDetails.task.dueDate || '');
       setLocalReminderTime(activeTaskDetails.task.reminderTime || '');
     } else {
       setLocalTitle('');
+      setLocalDescription('');
       setLocalDueDate('');
       setLocalReminderTime('');
     }
@@ -1517,6 +1521,20 @@ export default function App() {
                     }
                   }}
                   className="glass-input w-full min-h-[120px] resize-none text-base"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Task Description (Optional)</label>
+                <textarea 
+                  value={localDescription}
+                  onChange={(e) => setLocalDescription(e.target.value)}
+                  onBlur={() => {
+                    if (localDescription !== (activeTaskDetails.task.description || '')) {
+                      updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { description: localDescription });
+                    }
+                  }}
+                  className="glass-input w-full min-h-[100px] resize-none text-sm"
+                  placeholder="Add more details about this task..."
                 />
               </div>
               <div className="flex items-center justify-between bg-white/5 p-4 rounded-lg border border-white/10">
