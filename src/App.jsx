@@ -126,7 +126,7 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
     <div
       ref={setNodeRef}
       style={style}
-      className={`glass-card flex flex-col w-[320px] flex-shrink-0 max-h-full transition-all duration-300 rounded-2xl overflow-hidden ${isDragging ? 'shadow-[0_0_30px_rgba(124,58,237,0.5)]' : ''}`}
+      className={`glass-card flex flex-col w-[320px] h-[580px] flex-shrink-0 transition-all duration-300 rounded-2xl overflow-hidden ${isDragging ? 'shadow-[0_0_30px_rgba(124,58,237,0.5)]' : ''}`}
     >
       <div className="p-4 bg-white/5 border-b border-white/10 relative group">
         <div {...attributes} {...listeners} className="absolute top-2 left-2 cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300">
@@ -162,7 +162,7 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-hide min-h-[150px]">
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar min-h-[150px]">
         <SortableContext items={sortedTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
           {sortedTasks.map(task => (
             <SortableTaskItem 
