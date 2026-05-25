@@ -23,7 +23,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
-  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw
+  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag
 } from 'lucide-react';
 
 // --- INITIAL DATA & UTILS ---
@@ -91,6 +91,17 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
         }`}>
           {task.priority}
         </span>
+        {task.tag && task.tag !== 'Undefined' && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1 font-medium transition-colors ${
+            task.tag === 'Under 5 min' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' :
+            task.tag === 'Under 15 min' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+            task.tag === 'Under 30 min' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+            task.tag === 'Under 45 min' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+            'bg-slate-500/20 text-slate-300 border-slate-500/30'
+          }`}>
+            <Tag size={10} /> {task.tag}
+          </span>
+        )}
         {task.dueDate && <span className="text-[10px] text-slate-400 flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded"><Calendar size={10}/> {task.dueDate}</span>}
         {task.reminderTime && <span className="text-[10px] text-slate-400 flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded"><Bell size={10} className="text-brand-400"/> {task.reminderTime}</span>}
       </div>
@@ -465,6 +476,8 @@ export default function App() {
   const [localReminderTime, setLocalReminderTime] = useState('');
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
   const [searchHistoryQuery, setSearchHistoryQuery] = useState('');
+  const [showTagPopover, setShowTagPopover] = useState(false);
+  const [tagSearchQuery, setTagSearchQuery] = useState('');
 
   // Dynamic toast reminder states & checker
   const [notifications, setNotifications] = useState([]);
@@ -905,6 +918,7 @@ export default function App() {
     if (updates.completed !== undefined) dbUpdates.completed = updates.completed;
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
+    if (updates.tag !== undefined) dbUpdates.tag = updates.tag;
     if (updates.reminderTime !== undefined) {
       dbUpdates.reminder_time = updates.reminderTime;
       // Reset reminder trigger state so if user sets it to the current time, it triggers immediately
@@ -1119,11 +1133,15 @@ export default function App() {
       setLocalDescription(activeTaskDetails.task.description || '');
       setLocalDueDate(activeTaskDetails.task.dueDate || '');
       setLocalReminderTime(activeTaskDetails.task.reminderTime || '');
+      setShowTagPopover(false);
+      setTagSearchQuery('');
     } else {
       setLocalTitle('');
       setLocalDescription('');
       setLocalDueDate('');
       setLocalReminderTime('');
+      setShowTagPopover(false);
+      setTagSearchQuery('');
     }
   }, [activeTaskDetails?.task.id]);
 
@@ -1654,6 +1672,99 @@ export default function App() {
                   ))}
                 </div>
               </div>
+
+              <div className="relative">
+                <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Tag As</label>
+                <button
+                  type="button"
+                  onClick={() => setShowTagPopover(!showTagPopover)}
+                  className="w-full flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white hover:bg-white/10 transition-all text-sm cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Tag size={16} className="text-slate-400" />
+                    {activeTaskDetails.task.tag && activeTaskDetails.task.tag !== 'Undefined' ? (
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                        activeTaskDetails.task.tag === 'Under 5 min' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
+                        activeTaskDetails.task.tag === 'Under 15 min' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                        activeTaskDetails.task.tag === 'Under 30 min' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                        activeTaskDetails.task.tag === 'Under 45 min' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                        'bg-slate-500/20 text-slate-300 border border-slate-500/30'
+                      }`}>
+                        {activeTaskDetails.task.tag}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">Undefined</span>
+                    )}
+                  </div>
+                  <ChevronRight size={16} className={`text-slate-400 transition-transform ${showTagPopover ? 'rotate-90' : ''}`} />
+                </button>
+
+                {showTagPopover && (
+                  <div className="absolute left-0 right-0 mt-2 z-20 glass-card bg-slate-950/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-xl p-3 w-64 animate-in fade-in duration-200">
+                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Tag as</div>
+                    
+                    {/* Search Tags box */}
+                    <div className="relative mb-2">
+                      <Search size={14} className="absolute left-3 top-2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search Tags"
+                        value={tagSearchQuery}
+                        onChange={(e) => setTagSearchQuery(e.target.value)}
+                        className="glass-input text-xs w-full pl-9 pr-4 py-1.5 font-sans"
+                        autoFocus
+                      />
+                    </div>
+
+                    {/* Tags List */}
+                    <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+                      {[
+                        { name: 'Under 5 min', colorClass: 'bg-cyan-500' },
+                        { name: 'Under 15 min', colorClass: 'bg-emerald-500' },
+                        { name: 'Under 30 min', colorClass: 'bg-amber-500' },
+                        { name: 'Under 45 min', colorClass: 'bg-rose-500' },
+                        { name: 'Undefined', colorClass: 'bg-slate-500' }
+                      ]
+                        .filter(t => t.name.toLowerCase().includes(tagSearchQuery.toLowerCase()))
+                        .map(t => {
+                          const isSelected = activeTaskDetails.task.tag === t.name || (t.name === 'Undefined' && (!activeTaskDetails.task.tag || activeTaskDetails.task.tag === 'Undefined'));
+                          return (
+                            <button
+                              key={t.name}
+                              type="button"
+                              onClick={() => {
+                                updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { tag: t.name });
+                                setShowTagPopover(false);
+                                setTagSearchQuery('');
+                              }}
+                              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs text-left transition-all cursor-pointer ${
+                                isSelected ? 'bg-white/10 text-white font-semibold' : 'hover:bg-white/5 text-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className={`w-3.5 h-3.5 rounded ${t.colorClass} shadow-md flex-shrink-0`} />
+                                <span>{t.name}</span>
+                              </div>
+                              {isSelected && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-brand-400" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      {[
+                        { name: 'Under 5 min' },
+                        { name: 'Under 15 min' },
+                        { name: 'Under 30 min' },
+                        { name: 'Under 45 min' },
+                        { name: 'Undefined' }
+                      ].filter(t => t.name.toLowerCase().includes(tagSearchQuery.toLowerCase())).length === 0 && (
+                        <div className="text-slate-500 text-xs text-center py-3">No tags match your search</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4 pb-4">
                 <div>
                   <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={12}/> Due Date</label>
