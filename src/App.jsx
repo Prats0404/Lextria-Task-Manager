@@ -709,6 +709,12 @@ export default function App() {
     const el = boardContainerRef.current;
     if (el) {
       const handleWheel = (e) => {
+        // If scrolling inside an element that is scrollable vertically, let it scroll naturally
+        const scrollableChild = e.target.closest('.custom-scrollbar');
+        if (scrollableChild && scrollableChild.scrollHeight > scrollableChild.clientHeight) {
+          return;
+        }
+
         if (el.scrollWidth > el.clientWidth) {
           if (e.deltaY !== 0) {
             e.preventDefault();
@@ -1333,7 +1339,7 @@ export default function App() {
 
               <div 
                 ref={boardContainerRef}
-                className="flex gap-6 overflow-x-auto pb-6 custom-scrollbar items-stretch min-h-[500px]"
+                className="flex gap-6 overflow-x-auto pb-6 scrollbar-hide items-stretch min-h-[500px]"
               >
                 <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
                   <SortableContext items={currentBoard.employees.map(e => e.id)} strategy={horizontalListSortingStrategy}>
