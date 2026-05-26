@@ -46,6 +46,17 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 function getInitials(name) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
 }
+function formatDateToDDMMYY(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const year = parts[0].substring(2); // '26'
+    const month = parts[1]; // '05'
+    const day = parts[2]; // '26'
+    return `${day}/${month}/${year}`;
+  }
+  return dateStr;
+}
 
 // --- SORTABLE TASK ITEM ---
 function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClick }) {
@@ -102,7 +113,7 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
             <Tag size={10} /> {task.tag}
           </span>
         )}
-        {task.dueDate && <span className="text-[10px] text-slate-400 flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded"><Calendar size={10}/> {task.dueDate}</span>}
+        {task.dueDate && <span className="text-[10px] text-slate-400 flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded"><Calendar size={10}/> {formatDateToDDMMYY(task.dueDate)}</span>}
         {task.reminderTime && <span className="text-[10px] text-slate-400 flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded"><Bell size={10} className="text-brand-400"/> {task.reminderTime}</span>}
       </div>
     </div>
