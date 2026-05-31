@@ -31,10 +31,13 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+import { Analytics } from "@vercel/analytics/react";
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary>
       <App />
+      <Analytics />
     </ErrorBoundary>
   </React.StrictMode>
 );
