@@ -256,8 +256,6 @@ const getBoardTaskStats = (board) => {
   return { total, completed, pct };
 };
 
-};
-
 // --- ANALYTICS DASHBOARD COMPONENT ---
 function AnalyticsDashboard({ departments }) {
   // Compute Stats
