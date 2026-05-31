@@ -794,13 +794,18 @@ export default function App() {
   useEffect(() => {
     fetchData();
 
+    let fetchTimer;
     const channel = supabase.channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        fetchData();
+        clearTimeout(fetchTimer);
+        fetchTimer = setTimeout(() => {
+          fetchData();
+        }, 1000); // 1-second debounce to prevent drag-and-drop animation glitches
       })
       .subscribe();
 
     return () => {
+      clearTimeout(fetchTimer);
       supabase.removeChannel(channel);
     };
   }, []);
