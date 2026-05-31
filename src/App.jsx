@@ -1309,9 +1309,9 @@ export default function App() {
             <img 
               src="/logo.png" 
               alt="Lextria Logo" 
-              className="w-10 h-10 rounded-full object-cover shadow-lg border border-white/15"
+              className="w-12 h-12 rounded-full object-cover shadow-lg border border-white/15"
             />
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
               Lextria Task Manager
             </h1>
           </div>
