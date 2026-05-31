@@ -23,7 +23,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
-  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag
+  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter
 } from 'lucide-react';
 
 // --- INITIAL DATA & UTILS ---
@@ -121,7 +121,7 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
 }
 
 // --- SORTABLE EMPLOYEE CARD (KANBAN COLUMN) ---
-function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask, deleteTask, addTask, onTaskClick }) {
+function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask, deleteTask, addTask, onTaskClick, priorityFilter, dueDateFilter }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: employee.id,
     data: { type: 'Employee', employee }
@@ -137,7 +137,19 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
   const totalTasks = employee.tasks.length;
   const progress = totalTasks === 0 ? 0 : Math.round((tasksCompleted / totalTasks) * 100);
 
-  const activeTasks = employee.tasks.filter(t => !t.completed);
+  const activeTasks = employee.tasks.filter(t => {
+    if (t.completed) return false;
+    if (priorityFilter && priorityFilter !== 'All' && t.priority !== priorityFilter) return false;
+    if (dueDateFilter && dueDateFilter !== 'All') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (dueDateFilter === 'Today') {
+        if (t.due_date !== todayStr) return false;
+      } else if (dueDateFilter === 'Overdue') {
+        if (!t.due_date || t.due_date >= todayStr) return false;
+      }
+    }
+    return true;
+  });
 
   const sortedTasks = [...activeTasks].sort((a, b) => {
     const pVals = { High: 3, Medium: 2, Low: 1 };
@@ -243,6 +255,120 @@ const getBoardTaskStats = (board) => {
   const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
   return { total, completed, pct };
 };
+
+};
+
+// --- ANALYTICS DASHBOARD COMPONENT ---
+function AnalyticsDashboard({ departments }) {
+  // Compute Stats
+  let totalTasks = 0;
+  let completedTasks = 0;
+  const deptStats = [];
+  const agentStats = [];
+
+  departments.forEach(dept => {
+    let deptTotal = 0;
+    let deptCompleted = 0;
+    dept.boards?.forEach(board => {
+      board.employees?.forEach(emp => {
+        let empTotal = 0;
+        let empCompleted = 0;
+        emp.tasks?.forEach(task => {
+          totalTasks++;
+          deptTotal++;
+          empTotal++;
+          if (task.completed) {
+            completedTasks++;
+            deptCompleted++;
+            empCompleted++;
+          }
+        });
+        if (empTotal > 0) {
+          agentStats.push({ name: emp.name, completed: empCompleted, total: empTotal, deptName: dept.name });
+        }
+      });
+    });
+    deptStats.push({ name: dept.name, total: deptTotal, completed: deptCompleted });
+  });
+
+  const overallPct = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+  
+  // Sort agents by completed tasks (Leaderboard)
+  agentStats.sort((a, b) => b.completed - a.completed);
+  const topAgents = agentStats.slice(0, 5);
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full max-w-7xl mx-auto space-y-6">
+      <div className="glass-card p-8 flex flex-col md:flex-row items-center justify-between gap-8 border-t border-brand-500/30">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-2"><BarChart3 className="text-brand-400"/> System Overview</h2>
+          <p className="text-slate-400">Total metrics across all departments and boards.</p>
+        </div>
+        <div className="flex flex-col items-center">
+          <div className="relative w-32 h-32 flex items-center justify-center">
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="40" className="stroke-white/10 fill-none stroke-[8]"></circle>
+              <circle cx="50" cy="50" r="40" className="stroke-brand-500 fill-none stroke-[8] transition-all duration-1000" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * overallPct) / 100} strokeLinecap="round"></circle>
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-2xl font-bold text-white">{overallPct}%</span>
+            </div>
+          </div>
+          <div className="mt-4 text-center text-sm font-medium text-slate-300">
+            <span className="text-green-400">{completedTasks}</span> / {totalTasks} Tasks Completed
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Department Workload */}
+        <div className="glass-card p-6">
+          <h3 className="text-xl font-bold text-white mb-6 border-b border-white/10 pb-4">Department Workload</h3>
+          <div className="space-y-6">
+            {deptStats.map((ds, i) => (
+              <div key={i} className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-white font-medium">{ds.name}</span>
+                  <span className="text-slate-400">{ds.total} Tasks</span>
+                </div>
+                <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden flex">
+                  <div className="h-full bg-cyan-500 rounded-l-full transition-all duration-1000" style={{ width: `${ds.total === 0 ? 0 : (ds.completed / ds.total) * 100}%` }}></div>
+                  <div className="h-full bg-slate-600/50 flex-1"></div>
+                </div>
+              </div>
+            ))}
+            {deptStats.length === 0 && <p className="text-slate-500 text-center">No departments available.</p>}
+          </div>
+        </div>
+
+        {/* Agent Leaderboard */}
+        <div className="glass-card p-6">
+          <h3 className="text-xl font-bold text-white mb-6 border-b border-white/10 pb-4 flex items-center gap-2">Top Agents <span className="bg-brand-500/20 text-brand-300 text-xs px-2 py-0.5 rounded-full">Completed Tasks</span></h3>
+          <div className="space-y-4">
+            {topAgents.map((ag, i) => (
+              <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${i === 0 ? 'bg-yellow-500 text-yellow-900 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : i === 1 ? 'bg-slate-300 text-slate-800' : i === 2 ? 'bg-orange-700 text-white' : 'bg-white/10 text-slate-400'}`}>
+                    #{i + 1}
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold text-sm">{ag.name}</div>
+                    <div className="text-xs text-slate-400">{ag.deptName}</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xl font-bold text-brand-400">{ag.completed}</div>
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">Completed</div>
+                </div>
+              </div>
+            ))}
+            {topAgents.length === 0 && <p className="text-slate-500 text-center">No active agents.</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // --- SORTABLE DEPARTMENTS & BOARDS COMPONENTS ---
 function SortableDepartment({
@@ -453,6 +579,9 @@ export default function App() {
   const [departments, setDepartments] = useState([]);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [priorityFilter, setPriorityFilter] = useState('All');
+  const [dueDateFilter, setDueDateFilter] = useState('All');
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
@@ -1189,6 +1318,67 @@ export default function App() {
             </h1>
           </div>
 
+          {/* Global Search Bar */}
+          <div className="relative w-full max-w-md hidden lg:block z-50">
+            <div className="relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-400 transition-colors" size={18} />
+              <input 
+                type="text" 
+                placeholder="Search tasks, tags, agents..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all shadow-[0_0_15px_rgba(0,0,0,0.2)]"
+              />
+            </div>
+            {/* Search Results Dropdown */}
+            {searchQuery.trim().length > 0 && (
+              <div className="absolute top-full mt-2 w-full bg-[#0f0724]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden max-h-[400px] overflow-y-auto">
+                {(() => {
+                  const query = searchQuery.toLowerCase();
+                  const results = [];
+                  departments.forEach(d => {
+                    d.boards?.forEach(b => {
+                      b.employees?.forEach(e => {
+                        e.tasks?.forEach(t => {
+                          if (t.title.toLowerCase().includes(query) || 
+                              t.description?.toLowerCase().includes(query) || 
+                              t.tag?.toLowerCase().includes(query) ||
+                              e.name.toLowerCase().includes(query)) {
+                            results.push({ dept: d, board: b, emp: e, task: t });
+                          }
+                        });
+                      });
+                    });
+                  });
+                  if (results.length === 0) {
+                    return <div className="p-4 text-center text-slate-400 text-sm">No tasks found.</div>;
+                  }
+                  return results.map((res, i) => (
+                    <button 
+                      key={i} 
+                      onClick={() => {
+                        setShowAnalytics(false);
+                        setSelectedDeptId(res.dept.id);
+                        setSelectedBoardId(res.board.id);
+                        setSelectedTaskDetails({ empId: res.emp.id, taskId: res.task.id });
+                        setSearchQuery('');
+                      }}
+                      className="w-full text-left px-4 py-3 border-b border-white/5 hover:bg-white/10 transition-colors flex flex-col gap-1"
+                    >
+                      <div className="text-white text-sm font-semibold truncate flex items-center gap-2">
+                        {res.task.completed ? <CheckCircle2 size={14} className="text-green-400"/> : <Circle size={14} className="text-brand-400"/>}
+                        {res.task.title}
+                      </div>
+                      <div className="text-xs text-slate-400 truncate flex items-center gap-1">
+                        <Building2 size={10}/> {res.dept.name} <ChevronRight size={10}/> {res.board.name} <ChevronRight size={10}/> {res.emp.name}
+                      </div>
+                    </button>
+                  ));
+                })()}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center space-x-4">
             {notificationPermission === 'default' && (
               <button 
@@ -1215,6 +1405,17 @@ export default function App() {
               >
                 <CheckCircle2 size={12} /> Alerts Active
               </span>
+            )}
+
+            {isAdmin && (
+              <button 
+                onClick={() => setShowAnalytics(!showAnalytics)} 
+                className={`p-2.5 rounded-xl transition-all flex items-center gap-2 ${showAnalytics ? 'bg-brand-500 text-white shadow-[0_0_15px_rgba(124,58,237,0.5)]' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                title="Analytics Dashboard"
+              >
+                <BarChart3 size={18} />
+                <span className="text-xs font-semibold hidden md:inline">Analytics</span>
+              </button>
             )}
 
             <button onClick={toggleAdmin} className={`p-2.5 rounded-xl transition-all ${isAdmin ? 'bg-brand-500/20 text-brand-300 shadow-[0_0_15px_rgba(124,58,237,0.3)]' : 'hover:bg-white/10 text-slate-300'}`} title="Admin Controls">
@@ -1260,8 +1461,12 @@ export default function App() {
       {/* Main Content */}
       <main className="max-w-[1600px] mx-auto px-6 py-6">
         
-        {/* LEVEL 1: DEPARTMENTS LIST */}
-        {!selectedDeptId && (
+        {showAnalytics && isAdmin ? (
+          <AnalyticsDashboard departments={departments} />
+        ) : (
+          <>
+            {/* LEVEL 1: DEPARTMENTS LIST */}
+            {!selectedDeptId && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2"><Building2 className="text-brand-400"/> Select a Department</h2>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDepartmentDragEnd}>
@@ -1332,7 +1537,32 @@ export default function App() {
           <div className="animate-in fade-in slide-in-from-right-4 duration-300 h-full">
             <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
               <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Users className="text-brand-400"/> Agents: {currentBoard.name}</h2>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 shadow-md">
+                  <Filter size={14} className="text-slate-400" />
+                  <select 
+                    value={priorityFilter} 
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                    className="bg-transparent text-sm text-slate-300 focus:outline-none appearance-none cursor-pointer"
+                  >
+                    <option value="All" className="bg-[#1a0a2e]">All Priorities</option>
+                    <option value="High" className="bg-[#1a0a2e]">High</option>
+                    <option value="Medium" className="bg-[#1a0a2e]">Medium</option>
+                    <option value="Low" className="bg-[#1a0a2e]">Low</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 shadow-md">
+                  <Calendar size={14} className="text-slate-400" />
+                  <select 
+                    value={dueDateFilter} 
+                    onChange={(e) => setDueDateFilter(e.target.value)}
+                    className="bg-transparent text-sm text-slate-300 focus:outline-none appearance-none cursor-pointer"
+                  >
+                    <option value="All" className="bg-[#1a0a2e]">Any Date</option>
+                    <option value="Today" className="bg-[#1a0a2e]">Due Today</option>
+                    <option value="Overdue" className="bg-[#1a0a2e]">Overdue</option>
+                  </select>
+                </div>
                 <button 
                   onClick={() => setShowHistorySidebar(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-slate-300 hover:text-white transition-all shadow-md active:scale-95 cursor-pointer"
@@ -1395,6 +1625,8 @@ export default function App() {
                         deleteTask={deleteTask}
                         addTask={addTask}
                         onTaskClick={(empId, taskId) => setSelectedTaskDetails({ empId, taskId })}
+                        priorityFilter={priorityFilter}
+                        dueDateFilter={dueDateFilter}
                       />
                     ))}
                   </SortableContext>
@@ -1408,13 +1640,26 @@ export default function App() {
                       <SortableTaskItem task={activeDragItem.task} employeeId={activeDragItem.employeeId} updateTask={()=>{}} deleteTask={()=>{}} onTaskClick={()=>{}} />
                     )}
                     {activeDragItem?.type === 'Employee' && (
-                      <SortableEmployeeCard employee={activeDragItem.employee} isAdmin={isAdmin} onDelete={()=>{}} onEdit={()=>{}} updateTask={()=>{}} deleteTask={()=>{}} addTask={()=>{}} onTaskClick={()=>{}} />
+                      <SortableEmployeeCard 
+                        employee={activeDragItem.employee} 
+                        isAdmin={isAdmin} 
+                        onDelete={()=>{}} 
+                        onEdit={()=>{}} 
+                        updateTask={()=>{}} 
+                        deleteTask={()=>{}} 
+                        addTask={()=>{}} 
+                        onTaskClick={()=>{}}
+                        priorityFilter={priorityFilter}
+                        dueDateFilter={dueDateFilter}
+                      />
                     )}
                   </DragOverlay>
                 </DndContext>
               </div>
             </div>
           </div>
+        )}
+        </>
         )}
 
       </main>
