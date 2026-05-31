@@ -770,7 +770,7 @@ export default function App() {
     const { data: deptData } = await supabase.from('departments').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
     const { data: boardData } = await supabase.from('boards').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
     const { data: agentData } = await supabase.from('agents').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
-    const { data: taskData } = await supabase.from('tasks').select('*').order('created_at', { ascending: true });
+    const { data: taskData } = await supabase.from('tasks').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
 
     if (deptData) {
       const nested = deptData.map(d => ({
@@ -1026,7 +1026,14 @@ export default function App() {
           let emp = board.employees.find(e => e.id === activeData.employeeId);
           const oldIndex = emp.tasks.findIndex(t => t.id === active.id);
           const newIndex = emp.tasks.findIndex(t => t.id === over.id);
-          emp.tasks = arrayMove(emp.tasks, oldIndex, newIndex);
+          const updatedTasks = arrayMove(emp.tasks, oldIndex, newIndex);
+          emp.tasks = updatedTasks;
+
+          // Asynchronously update positions in Supabase
+          updatedTasks.forEach((t, index) => {
+            supabase.from('tasks').update({ position: index }).eq('id', t.id).then();
+          });
+
           return next;
         });
       }
