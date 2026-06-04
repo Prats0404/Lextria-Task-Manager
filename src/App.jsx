@@ -321,7 +321,7 @@ function AnalyticsDashboard({ departments }) {
   
   // Sort agents by completed tasks (Leaderboard)
   agentStats.sort((a, b) => b.completed - a.completed);
-  const topAgents = agentStats.slice(0, 5);
+  const topAgents = agentStats.slice(0, 10);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full max-w-7xl mx-auto space-y-6">
