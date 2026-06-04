@@ -645,6 +645,8 @@ export default function App() {
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState('');
   const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [showAssigneePopover, setShowAssigneePopover] = useState(false);
+  const [assigneeSearchQuery, setAssigneeSearchQuery] = useState('');
 
   // Dynamic toast reminder states & checker
   const [notifications, setNotifications] = useState([]);
@@ -1072,16 +1074,60 @@ export default function App() {
   };
 
   const updateTask = async (empId, taskId, updates) => {
-    // Optimistic
-    setDepartments(departments.map(d => d.id === selectedDeptId ? {
-      ...d,
-      boards: d.boards.map(b => b.id === selectedBoardId ? {
-        ...b,
-        employees: b.employees.map(e => e.id === empId ? {
-          ...e, tasks: e.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
-        } : e)
-      } : b)
-    } : d));
+    // Optimistic relocation across employees, boards, and departments
+    setDepartments(prev => {
+      let taskToMove = null;
+      const isMovingEmployee = updates.agent_id !== undefined && updates.agent_id !== empId;
+
+      if (isMovingEmployee) {
+        // Pre-locate the task to ensure its details are not lost due to array mapping order
+        for (const d of prev) {
+          for (const b of d.boards || []) {
+            for (const e of b.employees || []) {
+              if (e.id === empId) {
+                taskToMove = e.tasks?.find(t => t.id === taskId);
+                break;
+              }
+            }
+            if (taskToMove) break;
+          }
+          if (taskToMove) break;
+        }
+      }
+
+      return prev.map(d => ({
+        ...d,
+        boards: d.boards.map(b => ({
+          ...b,
+          employees: b.employees.map(e => {
+            // Case 1: The old assignee (remove the task from their list if moving)
+            if (e.id === empId) {
+              if (isMovingEmployee) {
+                return {
+                  ...e,
+                  tasks: e.tasks.filter(t => t.id !== taskId)
+                };
+              } else {
+                // Regular updates in-place
+                return {
+                  ...e,
+                  tasks: e.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
+                };
+              }
+            }
+            // Case 2: The new assignee (append the task to their list with new updates)
+            if (isMovingEmployee && e.id === updates.agent_id) {
+              const updatedTask = taskToMove ? { ...taskToMove, ...updates } : { id: taskId, ...updates };
+              return {
+                ...e,
+                tasks: [...(e.tasks || []), updatedTask]
+              };
+            }
+            return e;
+          })
+        }))
+      }));
+    });
     
     // API
     const dbUpdates = {};
@@ -1091,6 +1137,7 @@ export default function App() {
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
     if (updates.tag !== undefined) dbUpdates.tag = updates.tag;
+    if (updates.agent_id !== undefined) dbUpdates.agent_id = updates.agent_id;
     if (updates.reminderTime !== undefined) {
       dbUpdates.reminder_time = updates.reminderTime;
       // Reset reminder trigger state so if user sets it to the current time, it triggers immediately
@@ -1271,15 +1318,37 @@ export default function App() {
   const currentDept = selectedDeptId ? departments.find(d => d.id === selectedDeptId) : null;
   const currentBoard = currentDept && selectedBoardId ? currentDept.boards.find(b => b.id === selectedBoardId) : null;
 
+  const allEmployees = useMemo(() => {
+    const list = [];
+    departments.forEach(dept => {
+      dept.boards?.forEach(board => {
+        board.employees?.forEach(emp => {
+          list.push({
+            ...emp,
+            boardName: board.name,
+            deptName: dept.name
+          });
+        });
+      });
+    });
+    return list;
+  }, [departments]);
+
   const activeTaskDetails = useMemo(() => {
-    if (!selectedTaskDetails || !currentBoard) return null;
-    const { empId, taskId } = selectedTaskDetails;
-    const emp = currentBoard.employees.find(e => e.id === empId);
-    if (!emp) return null;
-    const task = emp.tasks.find(t => t.id === taskId);
-    if (!task) return null;
-    return { emp, task };
-  }, [selectedTaskDetails, currentBoard]);
+    if (!selectedTaskDetails) return null;
+    const { taskId } = selectedTaskDetails;
+    for (const dept of departments) {
+      for (const board of dept.boards || []) {
+        for (const emp of board.employees || []) {
+          const task = emp.tasks?.find(t => t.id === taskId);
+          if (task) {
+            return { dept, board, emp, task };
+          }
+        }
+      }
+    }
+    return null;
+  }, [selectedTaskDetails, departments]);
 
   const completedTasks = useMemo(() => {
     if (!currentBoard) return [];
@@ -1315,6 +1384,8 @@ export default function App() {
       setShowTagPopover(false);
       setTagSearchQuery('');
       setIsEditingDescription(false);
+      setShowAssigneePopover(false);
+      setAssigneeSearchQuery('');
     } else {
       setLocalTitle('');
       setLocalDescription('');
@@ -1323,6 +1394,8 @@ export default function App() {
       setShowTagPopover(false);
       setTagSearchQuery('');
       setIsEditingDescription(false);
+      setShowAssigneePopover(false);
+      setAssigneeSearchQuery('');
     }
   }, [activeTaskDetails?.task.id]);
 
@@ -1904,15 +1977,81 @@ export default function App() {
               <button onClick={() => setSelectedTaskDetails(null)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors"><X size={18} /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div>
+              <div className="relative">
                  <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Assigned To</label>
-                 <div className="flex items-center space-x-3 bg-white/5 p-3 rounded-lg border border-white/10">
-                    <div className={`w-8 h-8 rounded-full ${activeTaskDetails.emp.color} flex items-center justify-center text-xs font-bold`}>{getInitials(activeTaskDetails.emp.name)}</div>
-                    <div>
-                      <p className="text-sm text-white font-medium">{activeTaskDetails.emp.name}</p>
-                      <p className="text-xs text-slate-400">{currentBoard.name}</p>
-                    </div>
-                 </div>
+                 <button
+                   type="button"
+                   onClick={() => setShowAssigneePopover(!showAssigneePopover)}
+                   className="w-full flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/10 hover:bg-white/10 transition-all text-left cursor-pointer"
+                 >
+                   <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-full ${activeTaskDetails.emp.color} flex items-center justify-center text-xs font-bold flex-shrink-0`}>{getInitials(activeTaskDetails.emp.name)}</div>
+                      <div>
+                        <p className="text-sm text-white font-medium">{activeTaskDetails.emp.name}</p>
+                        <p className="text-xs text-slate-400">{activeTaskDetails.board.name} ({activeTaskDetails.dept.name})</p>
+                      </div>
+                   </div>
+                   <ChevronRight size={16} className={`text-slate-400 transition-transform ${showAssigneePopover ? 'rotate-95' : ''}`} />
+                 </button>
+
+                 {showAssigneePopover && (
+                   <div className="absolute left-0 right-0 mt-2 z-20 glass-card bg-slate-950/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-xl p-3 w-full animate-in fade-in duration-200">
+                     <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Assign to Employee</div>
+                     
+                     {/* Search Box */}
+                     <div className="relative mb-2">
+                       <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                       <input
+                         type="text"
+                         placeholder="Search Employees"
+                         value={assigneeSearchQuery}
+                         onChange={(e) => setAssigneeSearchQuery(e.target.value)}
+                         className="glass-input text-xs w-full pl-9 pr-4 py-1.5 font-sans"
+                         autoFocus
+                       />
+                     </div>
+
+                     {/* Employees List */}
+                     <div className="space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
+                       {allEmployees
+                         .filter(emp => emp.name.toLowerCase().includes(assigneeSearchQuery.toLowerCase()))
+                         .map(emp => {
+                           const isSelected = emp.id === activeTaskDetails.emp.id;
+                           return (
+                             <button
+                               key={emp.id}
+                               type="button"
+                               onClick={async () => {
+                                 await updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { agent_id: emp.id });
+                                 setSelectedTaskDetails({ ...selectedTaskDetails, empId: emp.id });
+                                 setShowAssigneePopover(false);
+                                 setAssigneeSearchQuery('');
+                               }}
+                               className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition-all cursor-pointer ${
+                                 isSelected ? 'bg-white/10 text-white font-semibold' : 'hover:bg-white/5 text-slate-300'
+                               }`}
+                             >
+                               <div className="flex items-center gap-3">
+                                 <div className={`w-6 h-6 rounded-full ${emp.color} flex items-center justify-center text-[10px] font-bold flex-shrink-0`}>
+                                   {getInitials(emp.name)}
+                                 </div>
+                                 <div>
+                                   <span className="text-xs block font-medium text-white">{emp.name}</span>
+                                   <span className="text-[10px] text-slate-400 block">{emp.boardName} ({emp.deptName})</span>
+                                 </div>
+                               </div>
+                               {isSelected && (
+                                 <span className="w-1.5 h-1.5 rounded-full bg-brand-400" />
+                               )}
+                             </button>
+                           );
+                         })}
+                       {allEmployees.filter(emp => emp.name.toLowerCase().includes(assigneeSearchQuery.toLowerCase())).length === 0 && (
+                         <div className="text-slate-500 text-xs text-center py-3">No employees match your search</div>
+                       )}
+                     </div>
+                   </div>
+                 )}
               </div>
               <div>
                 <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Task Title</label>
