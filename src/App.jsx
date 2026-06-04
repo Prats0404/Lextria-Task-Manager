@@ -57,6 +57,34 @@ function formatDateToDDMMYY(dateStr) {
   }
   return dateStr;
 }
+function renderDescriptionWithLinks(text) {
+  if (!text) return null;
+  const linkRegex = /((?:https?:\/\/|www\.)[^\s]+|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+  const parts = text.split(linkRegex);
+  return parts.map((part, index) => {
+    if (linkRegex.test(part)) {
+      let href = part;
+      if (part.toLowerCase().startsWith('www.')) {
+        href = `https://${part}`;
+      } else if (part.includes('@') && !part.toLowerCase().startsWith('http')) {
+        href = `mailto:${part}`;
+      }
+      return (
+        <a
+          key={index}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-brand-400 hover:text-brand-300 underline break-all cursor-pointer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
 
 // --- SORTABLE TASK ITEM ---
 function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClick }) {
@@ -616,6 +644,7 @@ export default function App() {
   const [searchHistoryQuery, setSearchHistoryQuery] = useState('');
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState('');
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
 
   // Dynamic toast reminder states & checker
   const [notifications, setNotifications] = useState([]);
@@ -1285,6 +1314,7 @@ export default function App() {
       setLocalReminderTime(activeTaskDetails.task.reminderTime || '');
       setShowTagPopover(false);
       setTagSearchQuery('');
+      setIsEditingDescription(false);
     } else {
       setLocalTitle('');
       setLocalDescription('');
@@ -1292,6 +1322,7 @@ export default function App() {
       setLocalReminderTime('');
       setShowTagPopover(false);
       setTagSearchQuery('');
+      setIsEditingDescription(false);
     }
   }, [activeTaskDetails?.task.id]);
 
@@ -1898,17 +1929,30 @@ export default function App() {
               </div>
               <div>
                 <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Task Description (Optional)</label>
-                <textarea 
-                  value={localDescription}
-                  onChange={(e) => setLocalDescription(e.target.value)}
-                  onBlur={() => {
-                    if (localDescription !== (activeTaskDetails.task.description || '')) {
-                      updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { description: localDescription });
-                    }
-                  }}
-                  className="glass-input w-full min-h-[100px] resize-none text-sm"
-                  placeholder="Add more details about this task..."
-                />
+                {isEditingDescription ? (
+                  <textarea 
+                    value={localDescription}
+                    onChange={(e) => setLocalDescription(e.target.value)}
+                    onBlur={() => {
+                      setIsEditingDescription(false);
+                      if (localDescription !== (activeTaskDetails.task.description || '')) {
+                        updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { description: localDescription });
+                      }
+                    }}
+                    className="glass-input w-full min-h-[100px] resize-none text-sm font-sans"
+                    placeholder="Add more details about this task..."
+                    autoFocus
+                  />
+                ) : (
+                  <div 
+                    onClick={() => setIsEditingDescription(true)}
+                    className="glass-input w-full min-h-[100px] text-sm cursor-pointer whitespace-pre-wrap hover:bg-white/10 transition-colors p-3 rounded-lg border border-white/10 font-sans"
+                  >
+                    {renderDescriptionWithLinks(localDescription) || (
+                      <span className="text-slate-500 italic">Add more details about this task...</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex items-center justify-between bg-white/5 p-4 rounded-lg border border-white/10">
                  <span className="text-sm text-slate-300 font-medium">Status</span>
