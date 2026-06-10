@@ -150,6 +150,8 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
 
 // --- SORTABLE EMPLOYEE CARD (KANBAN COLUMN) ---
 function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask, deleteTask, addTask, onTaskClick, priorityFilter, dueDateFilter }) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [titleInput, setTitleInput] = useState('');
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: employee.id,
     data: { type: 'Employee', employee }
@@ -240,12 +242,65 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
       </div>
 
       <div className="p-3 border-t border-white/10 bg-black/20">
-        <button 
-          onClick={() => addTask(employee.id)}
-          className="w-full py-2 flex items-center justify-center gap-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-        >
-          <Plus size={16} /> Add Task
-        </button>
+        {isAdding ? (
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Enter task title..."
+              value={titleInput}
+              onChange={(e) => setTitleInput(e.target.value)}
+              className="glass-input w-full text-xs py-1.5 px-3 font-sans"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (titleInput.trim()) {
+                    addTask(employee.id, titleInput.trim());
+                    setTitleInput('');
+                    setIsAdding(false);
+                  }
+                } else if (e.key === 'Escape') {
+                  setIsAdding(false);
+                  setTitleInput('');
+                }
+              }}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAdding(false);
+                  setTitleInput('');
+                }}
+                className="px-2.5 py-1 text-[11px] text-slate-400 hover:text-white hover:bg-white/5 rounded transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (titleInput.trim()) {
+                    addTask(employee.id, titleInput.trim());
+                    setTitleInput('');
+                    setIsAdding(false);
+                  }
+                }}
+                className="px-3 py-1 text-[11px] bg-brand-600 hover:bg-brand-500 text-white rounded font-medium shadow-md shadow-brand-600/35 transition-all cursor-pointer"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button 
+            onClick={() => {
+              setIsAdding(true);
+              setTitleInput('');
+            }}
+            className="w-full py-2 flex items-center justify-center gap-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all cursor-pointer"
+          >
+            <Plus size={16} /> Add Task
+          </button>
+        )}
       </div>
     </div>
   );
@@ -640,6 +695,13 @@ export default function App() {
   const [localDescription, setLocalDescription] = useState('');
   const [localDueDate, setLocalDueDate] = useState('');
   const [localReminderTime, setLocalReminderTime] = useState('');
+  const [localStatus, setLocalStatus] = useState(false);
+  const [localPriority, setLocalPriority] = useState('Medium');
+  const [localTag, setLocalTag] = useState('Undefined');
+  const [localAssigneeId, setLocalAssigneeId] = useState('');
+  const [localEmp, setLocalEmp] = useState(null);
+  const [localBoard, setLocalBoard] = useState(null);
+  const [localDept, setLocalDept] = useState(null);
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
   const [searchHistoryQuery, setSearchHistoryQuery] = useState('');
   const [showTagPopover, setShowTagPopover] = useState(false);
@@ -999,6 +1061,7 @@ export default function App() {
     const formData = new FormData(e.target);
     const name = formData.get('name');
     const password = formData.get('password') || '';
+    
     if (editingDepartment) {
       const removePassword = formData.get('remove_password') === 'on';
       let changePassword = false;
@@ -1010,36 +1073,144 @@ export default function App() {
         changePassword = true;
         newPassword = password;
       }
-      await supabase.rpc('update_department', {
-        dept_id: editingDepartment.id,
-        dept_name: name,
-        input_password: newPassword,
-        change_password: changePassword
-      });
+      
+      const hasPassword = removePassword ? false : (password !== '' ? true : editingDepartment.has_password);
+      
+      // Optimistic edit
+      setDepartments(prev => prev.map(d => d.id === editingDepartment.id ? {
+        ...d,
+        name,
+        has_password: hasPassword
+      } : d));
+      setShowAddDeptModal(false);
+      const originalDept = { ...editingDepartment };
+      setEditingDepartment(null);
+
+      try {
+        await supabase.rpc('update_department', {
+          dept_id: originalDept.id,
+          dept_name: name,
+          input_password: newPassword,
+          change_password: changePassword
+        });
+      } catch (err) {
+        console.error(err);
+      }
     } else {
-      await supabase.rpc('create_department_with_password', {
-        dept_name: name,
-        input_password: password
-      });
+      const tempId = 'temp-dept-' + Math.random().toString(36).substring(2, 11);
+      const newDeptObj = {
+        id: tempId,
+        name,
+        boards: [],
+        has_password: password !== '',
+        position: 999
+      };
+      
+      // Optimistic insert
+      setDepartments(prev => [...prev, newDeptObj]);
+      setShowAddDeptModal(false);
+      setSelectedDeptId(tempId);
+
+      try {
+        const { data: newDeptId, error } = await supabase.rpc('create_department_with_password', {
+          dept_name: name,
+          input_password: password
+        });
+
+        if (error) {
+          console.error(error);
+          // Rollback
+          setDepartments(prev => prev.filter(d => d.id !== tempId));
+          setSelectedDeptId(null);
+          return;
+        }
+
+        if (newDeptId) {
+          setDepartments(prev => prev.map(d => d.id === tempId ? { ...d, id: newDeptId } : d));
+          setSelectedDeptId(newDeptId);
+        }
+      } catch (err) {
+        console.error(err);
+        // Rollback
+        setDepartments(prev => prev.filter(d => d.id !== tempId));
+        setSelectedDeptId(null);
+      }
     }
-    setShowAddDeptModal(false);
-    setEditingDepartment(null);
   };
 
-  // --- CRUD BOARDS ---
   const handleAddBoard = async (e) => {
     e.preventDefault();
     const name = new FormData(e.target).get('name');
     if (editingBoard) {
-      await supabase.from('boards').update({ name }).eq('id', editingBoard.id);
+      // Optimistic edit
+      setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+        ...d,
+        boards: d.boards.map(b => b.id === editingBoard.id ? { ...b, name } : b)
+      } : d));
+      setShowAddBoardModal(false);
+      const originalBoard = { ...editingBoard };
+      setEditingBoard(null);
+
+      try {
+        await supabase.from('boards').update({ name }).eq('id', originalBoard.id);
+      } catch (err) {
+        console.error(err);
+      }
     } else {
-      await supabase.from('boards').insert([{ department_id: selectedDeptId, name }]);
+      const tempId = 'temp-board-' + Math.random().toString(36).substring(2, 11);
+      const newBoardObj = {
+        id: tempId,
+        department_id: selectedDeptId,
+        name,
+        employees: [],
+        position: 999
+      };
+
+      // Optimistic insert
+      setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+        ...d,
+        boards: [...(d.boards || []), newBoardObj]
+      } : d));
+      setShowAddBoardModal(false);
+      setSelectedBoardId(tempId);
+
+      try {
+        const { data, error } = await supabase.from('boards').insert([{ department_id: selectedDeptId, name }]).select();
+        
+        if (error) {
+          console.error(error);
+          // Rollback
+          setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+            ...d,
+            boards: d.boards.filter(b => b.id !== tempId)
+          } : d));
+          setSelectedBoardId(null);
+          return;
+        }
+
+        if (data && data[0]) {
+          const realBoard = {
+            ...data[0],
+            employees: []
+          };
+          setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+            ...d,
+            boards: d.boards.map(b => b.id === tempId ? realBoard : b)
+          } : d));
+          setSelectedBoardId(realBoard.id);
+        }
+      } catch (err) {
+        console.error(err);
+        // Rollback
+        setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+          ...d,
+          boards: d.boards.filter(b => b.id !== tempId)
+        } : d));
+        setSelectedBoardId(null);
+      }
     }
-    setShowAddBoardModal(false);
-    setEditingBoard(null);
   };
 
-  // --- CRUD AGENTS ---
   const handleAddOrEditEmployee = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -1048,12 +1219,88 @@ export default function App() {
     const color = formData.get('color');
 
     if (editingEmployee) {
-      await supabase.from('agents').update({ name, role, color }).eq('id', editingEmployee.id);
+      // Optimistic edit
+      setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+        ...d,
+        boards: d.boards.map(b => b.id === selectedBoardId ? {
+          ...b,
+          employees: b.employees.map(emp => emp.id === editingEmployee.id ? {
+            ...emp, name, role, color
+          } : emp)
+        } : b)
+      } : d));
+      setShowAddEmpModal(false);
+      const originalEmployee = { ...editingEmployee };
+      setEditingEmployee(null);
+
+      try {
+        await supabase.from('agents').update({ name, role, color }).eq('id', originalEmployee.id);
+      } catch (err) {
+        console.error(err);
+      }
     } else {
-      await supabase.from('agents').insert([{ board_id: selectedBoardId, name, role, color }]);
+      const tempId = 'temp-emp-' + Math.random().toString(36).substring(2, 11);
+      const newEmpObj = {
+        id: tempId,
+        board_id: selectedBoardId,
+        name,
+        role,
+        color,
+        tasks: [],
+        position: 999
+      };
+
+      // Optimistic insert
+      setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+        ...d,
+        boards: d.boards.map(b => b.id === selectedBoardId ? {
+          ...b,
+          employees: [...(b.employees || []), newEmpObj]
+        } : b)
+      } : d));
+      setShowAddEmpModal(false);
+
+      try {
+        const { data, error } = await supabase.from('agents').insert([{ board_id: selectedBoardId, name, role, color }]).select();
+        
+        if (error) {
+          console.error(error);
+          // Rollback
+          setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+            ...d,
+            boards: d.boards.map(b => b.id === selectedBoardId ? {
+              ...b,
+              employees: b.employees.filter(emp => emp.id !== tempId)
+            } : b)
+          } : d));
+          return;
+        }
+
+        if (data && data[0]) {
+          const realEmp = {
+            ...data[0],
+            tasks: []
+          };
+          setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+            ...d,
+            boards: d.boards.map(b => b.id === selectedBoardId ? {
+              ...b,
+              employees: b.employees.map(emp => emp.id === tempId ? realEmp : emp)
+            } : b)
+          } : d));
+        }
+      } catch (err) {
+        console.error(err);
+        // Rollback
+        setDepartments(prev => prev.map(d => d.id === selectedDeptId ? {
+          ...d,
+          boards: d.boards.map(b => b.id === selectedBoardId ? {
+            ...b,
+            employees: b.employees.filter(emp => emp.id !== tempId)
+          } : b)
+        } : d));
+      }
     }
-    setShowAddEmpModal(false);
-    setEditingEmployee(null);
   };
 
   const deleteEmployee = async (empId) => {
@@ -1068,9 +1315,95 @@ export default function App() {
     await supabase.from('agents').delete().eq('id', empId);
   };
 
-  // --- TASK ACTIONS ---
-  const addTask = async (empId) => {
-    await supabase.from('tasks').insert([{ agent_id: empId, title: 'New Task' }]);
+  const addTask = async (empId, title = 'New Task') => {
+    const tempId = 'temp-task-' + Math.random().toString(36).substring(2, 11);
+    const newTaskObj = {
+      id: tempId,
+      agent_id: empId,
+      title: title,
+      description: '',
+      completed: false,
+      priority: 'Medium',
+      dueDate: '',
+      reminderTime: '',
+      tag: 'Undefined',
+      position: 0
+    };
+
+    // Optimistic insert
+    setDepartments(prev => prev.map(d => ({
+      ...d,
+      boards: d.boards.map(b => ({
+        ...b,
+        employees: b.employees.map(e => e.id === empId ? {
+          ...e,
+          tasks: [...(e.tasks || []), newTaskObj]
+        } : e)
+      }))
+    })));
+
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert([{ agent_id: empId, title }])
+        .select();
+
+      if (error) {
+        console.error("Error creating task:", error);
+        // Rollback
+        setDepartments(prev => prev.map(d => ({
+          ...d,
+          boards: d.boards.map(b => ({
+            ...b,
+            employees: b.employees.map(e => e.id === empId ? {
+              ...e,
+              tasks: e.tasks.filter(t => t.id !== tempId)
+            } : e)
+          }))
+        })));
+        return;
+      }
+
+      if (data && data[0]) {
+        const realTask = {
+          ...data[0],
+          dueDate: data[0].due_date,
+          reminderTime: data[0].reminder_time
+        };
+        // Replace temp task with real task
+        setDepartments(prev => prev.map(d => ({
+          ...d,
+          boards: d.boards.map(b => ({
+            ...b,
+            employees: b.employees.map(e => e.id === empId ? {
+              ...e,
+              tasks: e.tasks.map(t => t.id === tempId ? realTask : t)
+            } : e)
+          }))
+        })));
+
+        // Sync details modal selection ID if user opened it while temp
+        setSelectedTaskDetails(prev => {
+          if (prev && prev.taskId === tempId) {
+            return { ...prev, taskId: realTask.id };
+          }
+          return prev;
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      // Rollback
+      setDepartments(prev => prev.map(d => ({
+        ...d,
+        boards: d.boards.map(b => ({
+          ...b,
+          employees: b.employees.map(e => e.id === empId ? {
+            ...e,
+            tasks: e.tasks.filter(t => t.id !== tempId)
+          } : e)
+        }))
+      })));
+    }
   };
 
   const updateTask = async (empId, taskId, updates) => {
@@ -1381,6 +1714,13 @@ export default function App() {
       setLocalDescription(activeTaskDetails.task.description || '');
       setLocalDueDate(activeTaskDetails.task.dueDate || '');
       setLocalReminderTime(activeTaskDetails.task.reminderTime || '');
+      setLocalStatus(activeTaskDetails.task.completed || false);
+      setLocalPriority(activeTaskDetails.task.priority || 'Medium');
+      setLocalTag(activeTaskDetails.task.tag || 'Undefined');
+      setLocalAssigneeId(activeTaskDetails.emp.id || '');
+      setLocalEmp(activeTaskDetails.emp);
+      setLocalBoard(activeTaskDetails.board);
+      setLocalDept(activeTaskDetails.dept);
       setShowTagPopover(false);
       setTagSearchQuery('');
       setIsEditingDescription(false);
@@ -1391,6 +1731,13 @@ export default function App() {
       setLocalDescription('');
       setLocalDueDate('');
       setLocalReminderTime('');
+      setLocalStatus(false);
+      setLocalPriority('Medium');
+      setLocalTag('Undefined');
+      setLocalAssigneeId('');
+      setLocalEmp(null);
+      setLocalBoard(null);
+      setLocalDept(null);
       setShowTagPopover(false);
       setTagSearchQuery('');
       setIsEditingDescription(false);
@@ -1887,7 +2234,15 @@ export default function App() {
               <button onClick={async () => {
                 const id = departmentToDelete.id;
                 setDepartmentToDelete(null);
-                await supabase.from('departments').delete().eq('id', id);
+                // Optimistic delete
+                setDepartments(prev => prev.filter(d => d.id !== id));
+                if (selectedDeptId === id) setSelectedDeptId(null);
+                
+                try {
+                  await supabase.from('departments').delete().eq('id', id);
+                } catch (err) {
+                  console.error(err);
+                }
               }} className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20">Delete</button>
             </div>
           </div>
@@ -1925,7 +2280,18 @@ export default function App() {
               <button onClick={async () => {
                 const id = boardToDelete.id;
                 setBoardToDelete(null);
-                await supabase.from('boards').delete().eq('id', id);
+                // Optimistic delete
+                setDepartments(prev => prev.map(d => ({
+                  ...d,
+                  boards: d.boards.filter(b => b.id !== id)
+                })));
+                if (selectedBoardId === id) setSelectedBoardId(null);
+
+                try {
+                  await supabase.from('boards').delete().eq('id', id);
+                } catch (err) {
+                  console.error(err);
+                }
               }} className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20">Delete</button>
             </div>
           </div>
@@ -1968,13 +2334,14 @@ export default function App() {
       )}
 
       {/* Task Details Modal */}
+      {/* Task Details Modal */}
       {activeTaskDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedTaskDetails(null)} />
           <div className="glass-card relative w-full max-w-2xl bg-[#120a21]/95 backdrop-blur-xl border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col animate-in fade-in zoom-in duration-200 max-h-[90vh]">
             <div className="p-5 border-b border-white/10 flex items-center justify-between bg-white/5 rounded-t-2xl">
               <h2 className="text-xl font-bold text-white">Task Details</h2>
-              <button onClick={() => setSelectedTaskDetails(null)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors"><X size={18} /></button>
+              <button onClick={() => setSelectedTaskDetails(null)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer"><X size={18} /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="relative">
@@ -1985,10 +2352,12 @@ export default function App() {
                    className="w-full flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/10 hover:bg-white/10 transition-all text-left cursor-pointer"
                  >
                    <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 rounded-full ${activeTaskDetails.emp.color} flex items-center justify-center text-xs font-bold flex-shrink-0`}>{getInitials(activeTaskDetails.emp.name)}</div>
+                      <div className={`w-8 h-8 rounded-full ${localEmp ? localEmp.color : 'bg-slate-500'} flex items-center justify-center text-xs font-bold flex-shrink-0`}>
+                        {localEmp ? getInitials(localEmp.name) : ''}
+                      </div>
                       <div>
-                        <p className="text-sm text-white font-medium">{activeTaskDetails.emp.name}</p>
-                        <p className="text-xs text-slate-400">{activeTaskDetails.board.name} ({activeTaskDetails.dept.name})</p>
+                        <p className="text-sm text-white font-medium">{localEmp ? localEmp.name : 'Unassigned'}</p>
+                        <p className="text-xs text-slate-400">{localBoard ? localBoard.name : ''} ({localDept ? localDept.name : ''})</p>
                       </div>
                    </div>
                    <ChevronRight size={16} className={`text-slate-400 transition-transform ${showAssigneePopover ? 'rotate-95' : ''}`} />
@@ -2016,14 +2385,16 @@ export default function App() {
                        {allEmployees
                          .filter(emp => emp.name.toLowerCase().includes(assigneeSearchQuery.toLowerCase()))
                          .map(emp => {
-                           const isSelected = emp.id === activeTaskDetails.emp.id;
+                           const isSelected = emp.id === localAssigneeId;
                            return (
                              <button
                                key={emp.id}
                                type="button"
-                               onClick={async () => {
-                                 await updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { agent_id: emp.id });
-                                 setSelectedTaskDetails({ ...selectedTaskDetails, empId: emp.id });
+                               onClick={() => {
+                                 setLocalAssigneeId(emp.id);
+                                 setLocalEmp(emp);
+                                 setLocalBoard({ name: emp.boardName });
+                                 setLocalDept({ name: emp.deptName });
                                  setShowAssigneePopover(false);
                                  setAssigneeSearchQuery('');
                                }}
@@ -2058,12 +2429,7 @@ export default function App() {
                 <textarea 
                   value={localTitle}
                   onChange={(e) => setLocalTitle(e.target.value)}
-                  onBlur={() => {
-                    if (localTitle !== activeTaskDetails.task.title) {
-                      updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { title: localTitle });
-                    }
-                  }}
-                  className="glass-input w-full min-h-[120px] resize-none text-base"
+                  className="glass-input w-full min-h-[120px] resize-none text-base font-sans"
                 />
               </div>
               <div>
@@ -2072,12 +2438,7 @@ export default function App() {
                   <textarea 
                     value={localDescription}
                     onChange={(e) => setLocalDescription(e.target.value)}
-                    onBlur={() => {
-                      setIsEditingDescription(false);
-                      if (localDescription !== (activeTaskDetails.task.description || '')) {
-                        updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { description: localDescription });
-                      }
-                    }}
+                    onBlur={() => setIsEditingDescription(false)}
                     className="glass-input w-full min-h-[100px] resize-none text-sm font-sans"
                     placeholder="Add more details about this task..."
                     autoFocus
@@ -2096,11 +2457,11 @@ export default function App() {
               <div className="flex items-center justify-between bg-white/5 p-4 rounded-lg border border-white/10">
                  <span className="text-sm text-slate-300 font-medium">Status</span>
                  <button 
-                  onClick={() => updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { completed: !activeTaskDetails.task.completed })}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTaskDetails.task.completed ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-300'}`}
+                  onClick={() => setLocalStatus(!localStatus)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${localStatus ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-300'}`}
                  >
-                   {activeTaskDetails.task.completed ? <CheckCircle2 size={16}/> : <Circle size={16}/>}
-                   {activeTaskDetails.task.completed ? 'Completed' : 'Incomplete'}
+                   {localStatus ? <CheckCircle2 size={16}/> : <Circle size={16}/>}
+                   {localStatus ? 'Completed' : 'Incomplete'}
                  </button>
               </div>
               <div>
@@ -2109,9 +2470,9 @@ export default function App() {
                   {['Low', 'Medium', 'High'].map(p => (
                     <button
                       key={p}
-                      onClick={() => updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { priority: p })}
+                      onClick={() => setLocalPriority(p)}
                       className={`flex-1 py-2 rounded-lg text-sm transition-all border ${
-                        activeTaskDetails.task.priority === p 
+                        localPriority === p 
                         ? (p === 'High' ? 'bg-red-500/20 text-red-400 border-red-500/50' : p === 'Medium' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50' : 'bg-green-500/20 text-green-400 border-green-500/50')
                         : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
                       }`}
@@ -2131,15 +2492,15 @@ export default function App() {
                 >
                   <div className="flex items-center gap-2">
                     <Tag size={16} className="text-slate-400" />
-                    {activeTaskDetails.task.tag && activeTaskDetails.task.tag !== 'Undefined' ? (
+                    {localTag && localTag !== 'Undefined' ? (
                       <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                        activeTaskDetails.task.tag === 'Under 5 min' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
-                        activeTaskDetails.task.tag === 'Under 15 min' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
-                        activeTaskDetails.task.tag === 'Under 30 min' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
-                        activeTaskDetails.task.tag === 'Under 45 min' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                        localTag === 'Under 5 min' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
+                        localTag === 'Under 15 min' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                        localTag === 'Under 30 min' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                        localTag === 'Under 45 min' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
                         'bg-slate-500/20 text-slate-300 border border-slate-500/30'
                       }`}>
-                        {activeTaskDetails.task.tag}
+                        {localTag}
                       </span>
                     ) : (
                       <span className="text-slate-400">Undefined</span>
@@ -2176,13 +2537,13 @@ export default function App() {
                       ]
                         .filter(t => t.name.toLowerCase().includes(tagSearchQuery.toLowerCase()))
                         .map(t => {
-                          const isSelected = activeTaskDetails.task.tag === t.name || (t.name === 'Undefined' && (!activeTaskDetails.task.tag || activeTaskDetails.task.tag === 'Undefined'));
+                          const isSelected = localTag === t.name || (t.name === 'Undefined' && (!localTag || localTag === 'Undefined'));
                           return (
                             <button
                               key={t.name}
                               type="button"
                               onClick={() => {
-                                updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { tag: t.name });
+                                setLocalTag(t.name);
                                 setShowTagPopover(false);
                                 setTagSearchQuery('');
                               }}
@@ -2223,7 +2584,6 @@ export default function App() {
                     value={localDueDate} 
                     onChange={(e) => {
                       setLocalDueDate(e.target.value);
-                      updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { dueDate: e.target.value });
                     }}
                   />
                 </div>
@@ -2235,7 +2595,6 @@ export default function App() {
                     value={localReminderTime} 
                     onChange={(e) => {
                       setLocalReminderTime(e.target.value);
-                      updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, { reminderTime: e.target.value });
                       if ('Notification' in window && Notification.permission === 'default') {
                         Notification.requestPermission().then(permission => {
                           setNotificationPermission(permission);
@@ -2247,6 +2606,39 @@ export default function App() {
                   />
                 </div>
               </div>
+            </div>
+            
+            {/* Modal Actions Footer */}
+            <div className="p-5 border-t border-white/10 flex justify-end space-x-3 bg-white/5 rounded-b-2xl">
+              <button 
+                type="button" 
+                onClick={() => setSelectedTaskDetails(null)} 
+                className="px-4 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition-colors font-medium text-sm cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={async () => {
+                  const updates = {
+                    title: localTitle,
+                    description: localDescription,
+                    completed: localStatus,
+                    priority: localPriority,
+                    tag: localTag,
+                    dueDate: localDueDate,
+                    reminderTime: localReminderTime
+                  };
+                  if (localAssigneeId !== activeTaskDetails.emp.id) {
+                    updates.agent_id = localAssigneeId;
+                  }
+                  await updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, updates);
+                  setSelectedTaskDetails(null);
+                }} 
+                className="glass-button text-sm px-5 py-2 font-semibold bg-brand-600 hover:bg-brand-500 rounded-lg text-white transition-all shadow-[0_0_15px_rgba(124,58,237,0.4)] cursor-pointer"
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         </div>
