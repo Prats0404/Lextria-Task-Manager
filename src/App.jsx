@@ -23,8 +23,9 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
-  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter
+  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, Image, UploadCloud, Link
 } from 'lucide-react';
+
 
 // --- INITIAL DATA & UTILS ---
 const defaultData = [
@@ -105,6 +106,18 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
       style={style}
       className={`group relative bg-white/5 border border-white/10 rounded-lg p-3 flex flex-col gap-2 transition-all hover:bg-white/10 ${task.completed ? 'opacity-50' : ''}`}
     >
+      {task.screenshotUrl && (
+        <div 
+          onClick={() => onTaskClick(employeeId, task.id)}
+          className="w-full h-28 rounded-md overflow-hidden border border-white/5 mb-1 cursor-pointer flex-shrink-0"
+        >
+          <img 
+            src={task.screenshotUrl} 
+            alt={task.title} 
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
       <div className="flex items-start gap-2">
         <div {...attributes} {...listeners} className="mt-0.5 cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 touch-none">
           <GripVertical size={16} />
@@ -695,6 +708,7 @@ export default function App() {
   const [localDescription, setLocalDescription] = useState('');
   const [localDueDate, setLocalDueDate] = useState('');
   const [localReminderTime, setLocalReminderTime] = useState('');
+  const [localScreenshotUrl, setLocalScreenshotUrl] = useState('');
   const [localStatus, setLocalStatus] = useState(false);
   const [localPriority, setLocalPriority] = useState('Medium');
   const [localTag, setLocalTag] = useState('Undefined');
@@ -1002,7 +1016,8 @@ export default function App() {
             tasks: (taskData || []).filter(t => t.agent_id === a.id).map(t => ({
               ...t,
               dueDate: t.due_date,
-              reminderTime: t.reminder_time
+              reminderTime: t.reminder_time,
+              screenshotUrl: t.screenshot_url
             }))
           }))
         }))
@@ -1327,6 +1342,7 @@ export default function App() {
       dueDate: '',
       reminderTime: '',
       tag: 'Undefined',
+      screenshotUrl: '',
       position: 0
     };
 
@@ -1368,7 +1384,8 @@ export default function App() {
         const realTask = {
           ...data[0],
           dueDate: data[0].due_date,
-          reminderTime: data[0].reminder_time
+          reminderTime: data[0].reminder_time,
+          screenshotUrl: data[0].screenshot_url
         };
         // Replace temp task with real task
         setDepartments(prev => prev.map(d => ({
@@ -1471,6 +1488,7 @@ export default function App() {
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
     if (updates.tag !== undefined) dbUpdates.tag = updates.tag;
     if (updates.agent_id !== undefined) dbUpdates.agent_id = updates.agent_id;
+    if (updates.screenshotUrl !== undefined) dbUpdates.screenshot_url = updates.screenshotUrl;
     if (updates.reminderTime !== undefined) {
       dbUpdates.reminder_time = updates.reminderTime;
       // Reset reminder trigger state so if user sets it to the current time, it triggers immediately
@@ -1714,6 +1732,7 @@ export default function App() {
       setLocalDescription(activeTaskDetails.task.description || '');
       setLocalDueDate(activeTaskDetails.task.dueDate || '');
       setLocalReminderTime(activeTaskDetails.task.reminderTime || '');
+      setLocalScreenshotUrl(activeTaskDetails.task.screenshotUrl || '');
       setLocalStatus(activeTaskDetails.task.completed || false);
       setLocalPriority(activeTaskDetails.task.priority || 'Medium');
       setLocalTag(activeTaskDetails.task.tag || 'Undefined');
@@ -1731,6 +1750,7 @@ export default function App() {
       setLocalDescription('');
       setLocalDueDate('');
       setLocalReminderTime('');
+      setLocalScreenshotUrl('');
       setLocalStatus(false);
       setLocalPriority('Medium');
       setLocalTag('Undefined');
@@ -2454,6 +2474,83 @@ export default function App() {
                   </div>
                 )}
               </div>
+              
+              {/* Screenshot (Optional) */}
+              <div className="space-y-2">
+                <label className="text-xs text-slate-400 uppercase tracking-wider block flex items-center gap-1.5">
+                  <Image size={12} className="text-brand-400" /> Screenshot (Optional)
+                </label>
+                {localScreenshotUrl ? (
+                  <div className="relative group rounded-xl overflow-hidden border border-white/10 max-h-60 flex items-center justify-center bg-white/5 p-2">
+                    <img 
+                      src={localScreenshotUrl} 
+                      alt="Task Screenshot" 
+                      className="max-w-full max-h-56 object-contain rounded-lg"
+                    />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button 
+                        type="button" 
+                        onClick={() => setLocalScreenshotUrl('')}
+                        className="bg-red-600 hover:bg-red-500 text-white font-semibold text-xs py-2.5 px-4 rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-lg"
+                      >
+                        <Trash2 size={14} /> Remove Screenshot
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Upload Dropzone */}
+                    <label className="border border-dashed border-white/20 hover:border-brand-500/50 hover:bg-brand-500/5 transition-all rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer text-center group min-h-[120px]">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setLocalScreenshotUrl(reader.result);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      <UploadCloud size={24} className="text-slate-400 group-hover:text-brand-400 transition-colors mb-2" />
+                      <span className="text-xs text-slate-200 font-medium">Upload Local Image</span>
+                      <span className="text-[10px] text-slate-500 mt-1">PNG, JPG, GIF up to 5MB</span>
+                    </label>
+
+                    {/* Paste URL */}
+                    <div className="border border-white/10 rounded-xl p-5 bg-white/5 flex flex-col justify-center gap-3 min-h-[120px]">
+                      <span className="text-xs text-slate-200 font-medium flex items-center gap-1.5">
+                        <Link size={12} className="text-slate-400" /> Paste Image URL
+                      </span>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="https://example.com/image.png" 
+                          id="temp-screenshot-url-input"
+                          className="glass-input text-xs flex-1 py-1.5 pr-2 pl-3"
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            const val = document.getElementById('temp-screenshot-url-input')?.value;
+                            if (val) {
+                              setLocalScreenshotUrl(val);
+                            }
+                          }}
+                          className="bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs px-3 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between bg-white/5 p-4 rounded-lg border border-white/10">
                  <span className="text-sm text-slate-300 font-medium">Status</span>
                  <button 
@@ -2627,7 +2724,8 @@ export default function App() {
                     priority: localPriority,
                     tag: localTag,
                     dueDate: localDueDate,
-                    reminderTime: localReminderTime
+                    reminderTime: localReminderTime,
+                    screenshotUrl: localScreenshotUrl
                   };
                   if (localAssigneeId !== activeTaskDetails.emp.id) {
                     updates.agent_id = localAssigneeId;
