@@ -1004,7 +1004,39 @@ export default function App() {
     const { data: deptData } = await supabase.from('departments').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
     const { data: boardData } = await supabase.from('boards').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
     const { data: agentData } = await supabase.from('agents').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
-    const { data: taskData } = await supabase.from('tasks').select('*').order('position', { ascending: true }).order('created_at', { ascending: true });
+    
+    // Paginate task fetching to overcome the default 1000-row limit in Supabase/PostgREST
+    let allTasks = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('position', { ascending: true })
+        .order('created_at', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+
+      if (error) {
+        console.error("Error fetching tasks page:", error);
+        break;
+      }
+
+      if (data && data.length > 0) {
+        allTasks = [...allTasks, ...data];
+        if (data.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    const taskData = allTasks;
 
     if (deptData) {
       const nested = deptData.map(d => ({
