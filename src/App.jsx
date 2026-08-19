@@ -2503,6 +2503,108 @@ export default function App() {
                   className="glass-input w-full min-h-[120px] resize-none text-base font-sans"
                 />
               </div>
+
+              {/* Required Time to Complete (Prominently Placed at Top) */}
+              <div className="relative">
+                <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 font-medium">
+                  <Clock size={13} className="text-brand-400" /> Required Time to Complete
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowRequiredTimePopover(!showRequiredTimePopover)}
+                  className="w-full flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white hover:bg-white/10 transition-all text-sm cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Clock size={16} className="text-slate-400" />
+                    {localRequiredTime ? (
+                      <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
+                        ⏱️ {localRequiredTime}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-xs">Set required time (e.g. 10 min, 20 min, 2 hours)...</span>
+                    )}
+                  </div>
+                  <ChevronRight size={16} className={`text-slate-400 transition-transform ${showRequiredTimePopover ? 'rotate-90' : ''}`} />
+                </button>
+
+                {showRequiredTimePopover && (
+                  <div className="absolute left-0 right-0 mt-2 z-30 bg-[#160b2d]/98 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-xl p-4 w-full animate-in fade-in duration-200">
+                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Presets</div>
+                    
+                    {/* Presets Grid */}
+                    <div className="grid grid-cols-4 gap-2 mb-4">
+                      {['10 min', '20 min', '30 min', '45 min', '1 hour', '2 hours', '1 day', '2 days'].map(preset => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            setLocalRequiredTime(preset);
+                            setShowRequiredTimePopover(false);
+                          }}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                            localRequiredTime === preset
+                              ? 'bg-cyan-500/30 text-cyan-200 border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                              : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Custom Time Builder</div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Amount"
+                        value={customTimeVal}
+                        onChange={(e) => setCustomTimeVal(e.target.value)}
+                        className="glass-input text-xs w-24 py-1.5 px-3 font-sans"
+                      />
+                      <select
+                        value={customTimeUnit}
+                        onChange={(e) => setCustomTimeUnit(e.target.value)}
+                        className="glass-input text-xs py-1.5 px-3 font-sans bg-[#120a21] text-white cursor-pointer rounded-lg border border-white/10"
+                      >
+                        <option value="min">Minutes (min)</option>
+                        <option value="hours">Hours (hr)</option>
+                        <option value="days">Days</option>
+                        <option value="weeks">Weeks</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (customTimeVal.trim()) {
+                            const val = customTimeVal.trim();
+                            const unitStr = customTimeUnit === 'min' ? 'min' : customTimeUnit === 'hours' ? (val === '1' ? 'hour' : 'hours') : customTimeUnit === 'days' ? (val === '1' ? 'day' : 'days') : (val === '1' ? 'week' : 'weeks');
+                            setLocalRequiredTime(`${val} ${unitStr}`);
+                            setShowRequiredTimePopover(false);
+                            setCustomTimeVal('');
+                          }
+                        }}
+                        className="bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Set Time
+                      </button>
+                    </div>
+
+                    {localRequiredTime && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocalRequiredTime('');
+                          setShowRequiredTimePopover(false);
+                        }}
+                        className="w-full text-center text-xs text-red-400 hover:text-red-300 py-1 transition-colors border-t border-white/10 pt-2"
+                      >
+                        Remove Required Time
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Task Description (Optional)</label>
                 {isEditingDescription ? (
@@ -2611,106 +2713,6 @@ export default function App() {
                    {localStatus ? <CheckCircle2 size={16}/> : <Circle size={16}/>}
                    {localStatus ? 'Completed' : 'Incomplete'}
                  </button>
-              </div>
-              {/* Required Time to Complete */}
-              <div className="relative">
-                <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 font-medium">
-                  <Clock size={13} className="text-brand-400" /> Required Time to Complete
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowRequiredTimePopover(!showRequiredTimePopover)}
-                  className="w-full flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white hover:bg-white/10 transition-all text-sm cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Clock size={16} className="text-slate-400" />
-                    {localRequiredTime ? (
-                      <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
-                        ⏱️ {localRequiredTime}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 text-xs">Set required time (e.g. 10 min, 20 min, 2 hours)...</span>
-                    )}
-                  </div>
-                  <ChevronRight size={16} className={`text-slate-400 transition-transform ${showRequiredTimePopover ? 'rotate-90' : ''}`} />
-                </button>
-
-                {showRequiredTimePopover && (
-                  <div className="absolute left-0 right-0 mt-2 z-30 bg-[#160b2d]/98 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-xl p-4 w-full animate-in fade-in duration-200">
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Presets</div>
-                    
-                    {/* Presets Grid */}
-                    <div className="grid grid-cols-4 gap-2 mb-4">
-                      {['10 min', '20 min', '30 min', '45 min', '1 hour', '2 hours', '1 day', '2 days'].map(preset => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => {
-                            setLocalRequiredTime(preset);
-                            setShowRequiredTimePopover(false);
-                          }}
-                          className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
-                            localRequiredTime === preset
-                              ? 'bg-cyan-500/30 text-cyan-200 border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
-                              : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
-                          }`}
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Custom Time Builder</div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Amount"
-                        value={customTimeVal}
-                        onChange={(e) => setCustomTimeVal(e.target.value)}
-                        className="glass-input text-xs w-24 py-1.5 px-3 font-sans"
-                      />
-                      <select
-                        value={customTimeUnit}
-                        onChange={(e) => setCustomTimeUnit(e.target.value)}
-                        className="glass-input text-xs py-1.5 px-3 font-sans bg-[#120a21] text-white cursor-pointer rounded-lg border border-white/10"
-                      >
-                        <option value="min">Minutes (min)</option>
-                        <option value="hours">Hours (hr)</option>
-                        <option value="days">Days</option>
-                        <option value="weeks">Weeks</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (customTimeVal.trim()) {
-                            const val = customTimeVal.trim();
-                            const unitStr = customTimeUnit === 'min' ? 'min' : customTimeUnit === 'hours' ? (val === '1' ? 'hour' : 'hours') : customTimeUnit === 'days' ? (val === '1' ? 'day' : 'days') : (val === '1' ? 'week' : 'weeks');
-                            setLocalRequiredTime(`${val} ${unitStr}`);
-                            setShowRequiredTimePopover(false);
-                            setCustomTimeVal('');
-                          }
-                        }}
-                        className="bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                      >
-                        Set Time
-                      </button>
-                    </div>
-
-                    {localRequiredTime && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocalRequiredTime('');
-                          setShowRequiredTimePopover(false);
-                        }}
-                        className="w-full text-center text-xs text-red-400 hover:text-red-300 py-1 transition-colors border-t border-white/10 pt-2"
-                      >
-                        Remove Required Time
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
 
               <div>
