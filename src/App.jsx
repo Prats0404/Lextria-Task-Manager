@@ -58,6 +58,31 @@ function formatDateToDDMMYY(dateStr) {
   }
   return dateStr;
 }
+function parseTimeToHours(timeStr) {
+  if (!timeStr || timeStr === 'Undefined') return 0;
+  const str = timeStr.toLowerCase().trim();
+  
+  const numMatch = str.match(/(\d+(?:\.\d+)?)/);
+  if (numMatch) {
+    const num = parseFloat(numMatch[1]);
+    if (str.includes('min')) {
+      return num / 60;
+    } else if (str.includes('hour') || str.includes('hr')) {
+      return num;
+    } else if (str.includes('day')) {
+      return num * 8;
+    } else if (str.includes('week')) {
+      return num * 40;
+    }
+  }
+
+  if (str.includes('under 5 min')) return 5 / 60;
+  if (str.includes('under 15 min')) return 15 / 60;
+  if (str.includes('under 30 min')) return 30 / 60;
+  if (str.includes('under 45 min')) return 45 / 60;
+
+  return 0;
+}
 function renderDescriptionWithLinks(text) {
   if (!text) return null;
   const linkRegex = /((?:https?:\/\/|www\.)[^\s]+|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
@@ -185,6 +210,13 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
   const totalTasks = employee.tasks.length;
   const progress = totalTasks === 0 ? 0 : Math.round((tasksCompleted / totalTasks) * 100);
 
+  const completedHoursRaw = employee.tasks
+    .filter(t => t.completed)
+    .reduce((sum, t) => sum + parseTimeToHours(t.requiredTime || t.tag), 0);
+  const completedHours = Math.round(completedHoursRaw * 10) / 10;
+  const hoursPct = Math.round((completedHoursRaw / 8) * 100);
+  const isOvertime = completedHoursRaw > 8;
+
   const activeTasks = employee.tasks.filter(t => {
     if (t.completed) return false;
     if (priorityFilter && priorityFilter !== 'All' && t.priority !== priorityFilter) return false;
@@ -233,13 +265,37 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
             <p className="text-slate-400 text-xs truncate">{employee.role}</p>
           </div>
         </div>
-        <div className="mt-3">
-          <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-400 mb-1">
-            <span>Tasks Progress</span>
-            <span className="font-semibold text-brand-400">{tasksCompleted}/{totalTasks} ({progress}%)</span>
+        <div className="mt-3 space-y-2">
+          <div>
+            <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-400 mb-1">
+              <span>Tasks Progress</span>
+              <span className="font-semibold text-brand-400">{tasksCompleted}/{totalTasks} ({progress}%)</span>
+            </div>
+            <div className="w-full bg-slate-800/50 rounded-full h-1.5">
+              <div className="bg-brand-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+            </div>
           </div>
-          <div className="w-full bg-slate-800/50 rounded-full h-1.5">
-            <div className="bg-brand-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+
+          <div>
+            <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-400 mb-1">
+              <span className="flex items-center gap-1">
+                <Clock size={10} className={isOvertime ? "text-amber-400" : "text-cyan-400"} /> Work Hours (8h Day)
+              </span>
+              <span className={`font-semibold flex items-center gap-1 ${isOvertime ? 'text-amber-300 font-bold' : 'text-cyan-300'}`}>
+                {isOvertime && <span title="Overtime Productivity">⚡</span>}
+                {completedHours} / 8 hrs ({hoursPct}%)
+              </span>
+            </div>
+            <div className="w-full bg-slate-800/50 rounded-full h-1.5 overflow-hidden">
+              <div 
+                className={`h-1.5 rounded-full transition-all duration-500 ${
+                  isOvertime 
+                    ? 'bg-gradient-to-r from-amber-400 to-yellow-400 shadow-[0_0_12px_rgba(251,191,36,0.5)] animate-pulse' 
+                    : 'bg-gradient-to-r from-cyan-500 to-teal-400'
+                }`} 
+                style={{ width: `${Math.min(hoursPct, 100)}%` }} 
+              />
+            </div>
           </div>
         </div>
       </div>
