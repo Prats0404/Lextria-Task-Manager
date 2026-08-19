@@ -790,6 +790,31 @@ function SplashScreen({ onFinished }) {
 export default function App() {
   const [departments, setDepartments] = useState([]);
 
+  // --- ANTI-DEVTOOLS SECURITY ---
+  useEffect(() => {
+    // Disable right-click context menu
+    const handleContextMenu = (e) => e.preventDefault();
+    
+    // Disable keyboard shortcuts for DevTools
+    const handleKeyDown = (e) => {
+      if (
+        e.key === 'F12' || 
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) || 
+        (e.ctrlKey && (e.key === 'U' || e.key === 'u'))
+      ) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   // Splash intro — only shows once per session
   const [showSplash, setShowSplash] = useState(() => {
     return !sessionStorage.getItem('lextria_splash_shown');
