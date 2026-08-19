@@ -100,3 +100,109 @@
   from { width: 100%; }
   to { width: 0%; }
 }
+
+/* === Splash Screen Animations === */
+@keyframes splashFadeIn {
+  0% { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes splashTextReveal {
+  0% { opacity: 0; transform: translateY(20px); letter-spacing: 0.3em; }
+  100% { opacity: 1; transform: translateY(0); letter-spacing: 0.15em; }
+}
+
+@keyframes splashGlowPulse {
+  0%, 100% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.0), 0 0 80px rgba(139, 92, 246, 0.0); }
+  50% { box-shadow: 0 0 60px rgba(139, 92, 246, 0.4), 0 0 120px rgba(139, 92, 246, 0.2); }
+}
+
+@keyframes splashExit {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+
+@keyframes splashProgressBar {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+.splash-container {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a1a;
+  overflow: hidden;
+}
+
+.splash-container.splash-exit {
+  animation: splashExit 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.splash-video-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Circular mask — sized to show the full logo emblem */
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  overflow: hidden;
+  /* Decorative glow ring */
+  box-shadow:
+    0 0 0 3px rgba(139, 92, 246, 0.4),
+    0 0 40px rgba(139, 92, 246, 0.2),
+    0 0 80px rgba(139, 92, 246, 0.1);
+  animation: splashFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+             splashGlowPulse 2s ease-in-out 0.8s infinite;
+}
+
+.splash-video-wrapper video {
+  /* Video is 1920×1080. We display it at height≈310px so the full
+     video height (including the logo circle) fits inside the 280px
+     wrapper with just a tiny zoom to push white padding edges out.
+     Width at 310px height = 310 × 1.778 = 551px — the circle clips
+     the horizontal white areas while the centered logo stays fully visible. */
+  width: auto;
+  height: 310px;
+  object-fit: cover;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+.splash-title {
+  margin-top: 28px;
+  opacity: 0;
+  animation: splashTextReveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ffffff 0%, #a78bfa 50%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.splash-progress-track {
+  margin-top: 32px;
+  width: 160px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+  opacity: 0;
+  animation: splashTextReveal 0.5s ease 0.6s forwards;
+}
+
+.splash-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8b5cf6, #22d3ee);
+  border-radius: 9999px;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+}

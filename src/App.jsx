@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import {
   DndContext,
@@ -730,8 +730,70 @@ function SortableBoard({
 }
 
 // --- MAIN APP COMPONENT ---
+// --- ANIMATED INTRO SPLASH SCREEN ---
+function SplashScreen({ onFinished }) {
+  const videoRef = useRef(null);
+  const [exiting, setExiting] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const handleExit = useCallback(() => {
+    if (exiting) return;
+    setExiting(true);
+    setTimeout(() => {
+      onFinished();
+    }, 600); // matches the CSS exit animation duration
+  }, [exiting, onFinished]);
+
+  useEffect(() => {
+    // Fallback timeout: if video doesn't fire 'ended', dismiss after 6 seconds
+    const fallback = setTimeout(handleExit, 6000);
+    return () => clearTimeout(fallback);
+  }, [handleExit]);
+
+  // Track video progress for the progress bar
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    const onTimeUpdate = () => {
+      if (vid.duration) {
+        setProgress((vid.currentTime / vid.duration) * 100);
+      }
+    };
+    vid.addEventListener('timeupdate', onTimeUpdate);
+    return () => vid.removeEventListener('timeupdate', onTimeUpdate);
+  }, []);
+
+  return (
+    <div className={`splash-container ${exiting ? 'splash-exit' : ''}`}>
+      <div className="splash-video-wrapper">
+        <video
+          ref={videoRef}
+          src="/LEX_ANI_LOGO.mp4"
+          autoPlay
+          muted
+          playsInline
+          onEnded={handleExit}
+          style={{ background: 'transparent' }}
+        />
+      </div>
+      <div className="splash-title">Lextria Task Manager</div>
+      <div className="splash-progress-track">
+        <div
+          className="splash-progress-fill"
+          style={{ width: `${progress}%`, transition: 'width 0.2s linear' }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [departments, setDepartments] = useState([]);
+
+  // Splash intro — only shows once per session
+  const [showSplash, setShowSplash] = useState(() => {
+    return !sessionStorage.getItem('lextria_splash_shown');
+  });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAnalytics, setShowAnalytics] = useState(false);
@@ -1879,6 +1941,14 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen text-slate-100 overflow-x-hidden font-sans">
+      {/* Animated Intro Splash */}
+      {showSplash && (
+        <SplashScreen onFinished={() => {
+          sessionStorage.setItem('lextria_splash_shown', 'true');
+          setShowSplash(false);
+        }} />
+      )}
+
       {/* Background Orbs */}
       <div className="bg-orb bg-brand-600/30 w-[500px] h-[500px] top-[-100px] left-[-100px]" />
       <div className="bg-orb bg-accent-500/20 w-[400px] h-[400px] bottom-[10%] right-[-50px]" style={{ animationDelay: '-5s' }} />
