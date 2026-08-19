@@ -168,7 +168,7 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
         }`}>
           {task.priority}
         </span>
-        {task.requiredTime && (
+        {task.requiredTime && task.requiredTime !== 'Undefined' && (
           <span className="text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1 font-medium transition-colors bg-cyan-500/15 text-cyan-300 border-cyan-500/30">
             <Clock size={10} /> {task.requiredTime}
           </span>
@@ -1115,7 +1115,9 @@ export default function App() {
               dueDate: t.due_date,
               reminderTime: t.reminder_time,
               screenshotUrl: t.screenshot_url,
-              requiredTime: t.required_time || t.tag || ''
+              requiredTime: (t.required_time && t.required_time !== 'Undefined') 
+                ? t.required_time 
+                : (t.tag && t.tag !== 'Undefined' ? t.tag : '')
             }))
           }))
         }))
@@ -1588,8 +1590,11 @@ export default function App() {
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
     if (updates.tag !== undefined) dbUpdates.tag = updates.tag;
     if (updates.requiredTime !== undefined) {
-      dbUpdates.required_time = updates.requiredTime;
-      dbUpdates.tag = updates.requiredTime;
+      const timeVal = updates.requiredTime ? updates.requiredTime.trim() : '';
+      dbUpdates.required_time = timeVal;
+      dbUpdates.tag = (timeVal && timeVal !== 'Undefined') ? timeVal : 'Undefined';
+    } else if (updates.tag !== undefined) {
+      dbUpdates.tag = updates.tag;
     }
     if (updates.agent_id !== undefined) dbUpdates.agent_id = updates.agent_id;
     if (updates.screenshotUrl !== undefined) dbUpdates.screenshot_url = updates.screenshotUrl;
@@ -2941,12 +2946,13 @@ export default function App() {
               <button 
                 type="button" 
                 onClick={async () => {
+                  const finalTag = localRequiredTime ? localRequiredTime : (localTag || 'Undefined');
                   const updates = {
                     title: localTitle,
                     description: localDescription,
                     completed: localStatus,
                     priority: localPriority,
-                    tag: localTag,
+                    tag: finalTag,
                     requiredTime: localRequiredTime,
                     dueDate: localDueDate,
                     reminderTime: localReminderTime,
