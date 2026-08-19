@@ -108,6 +108,7 @@ ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE boards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS required_time text;
 
 -- Setup full read/write access policies for the client application
 DROP POLICY IF EXISTS "Public Read" ON departments;
