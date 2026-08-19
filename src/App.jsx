@@ -845,6 +845,8 @@ export default function App() {
   const [localDept, setLocalDept] = useState(null);
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
   const [searchHistoryQuery, setSearchHistoryQuery] = useState('');
+  const [showArchivePage, setShowArchivePage] = useState(false);
+  const [archivedTasks, setArchivedTasks] = useState([]);
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState('');
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -1163,7 +1165,28 @@ export default function App() {
       }
     }
 
-    const taskData = allTasks;
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Auto-archive past completed tasks
+    allTasks.forEach(t => {
+      if (t.completed && !t.is_archived && t.completed_date && t.completed_date < today) {
+        t.is_archived = true;
+        supabase.from('tasks').update({ is_archived: true }).eq('id', t.id).then();
+      }
+    });
+
+    const activeTasks = allTasks.filter(t => !t.is_archived);
+    const archivedTasksList = allTasks.filter(t => t.is_archived).map(t => ({
+      ...t,
+      dueDate: t.due_date,
+      reminderTime: t.reminder_time,
+      screenshotUrl: t.screenshot_url,
+      requiredTime: t.required_time || '',
+      completedDate: t.completed_date
+    }));
+    setArchivedTasks(archivedTasksList);
+
+    const taskData = activeTasks;
 
     if (deptData) {
       const nested = deptData.map(d => ({
@@ -1177,7 +1200,8 @@ export default function App() {
               dueDate: t.due_date,
               reminderTime: t.reminder_time,
               screenshotUrl: t.screenshot_url,
-              requiredTime: t.required_time || ''
+              requiredTime: t.required_time || '',
+              completedDate: t.completed_date
             }))
           }))
         }))
@@ -1645,7 +1669,14 @@ export default function App() {
     const dbUpdates = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
     if (updates.description !== undefined) dbUpdates.description = updates.description;
-    if (updates.completed !== undefined) dbUpdates.completed = updates.completed;
+    if (updates.completed !== undefined) {
+      dbUpdates.completed = updates.completed;
+      if (updates.completed) {
+        dbUpdates.completed_date = new Date().toISOString().split('T')[0];
+      } else {
+        dbUpdates.completed_date = null;
+      }
+    }
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
     if (updates.requiredTime !== undefined) {
@@ -2224,6 +2255,13 @@ export default function App() {
                       {completedTasks.length}
                     </span>
                   )}
+                </button>
+                <button 
+                  onClick={() => setShowArchivePage(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-slate-300 hover:text-white transition-all shadow-md active:scale-95 cursor-pointer"
+                >
+                  <Building2 size={16} className="text-slate-400" />
+                  <span>Archive & Reports</span>
                 </button>
                 <button onClick={() => setSelectedBoardId(null)} className="glass-button text-sm py-2 px-4 flex items-center gap-2"><ArrowLeft size={16}/> Back</button>
               </div>
@@ -3084,6 +3122,72 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      {/* Task Archive & Reports Page */}
+      {showArchivePage && (
+        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#120a21]">
+            <div className="flex items-center gap-3">
+              <Building2 className="text-brand-400" size={24} />
+              <h2 className="text-2xl font-bold text-white">Archive & Reports</h2>
+            </div>
+            <button onClick={() => setShowArchivePage(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer">
+              <X size={20} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 bg-[#0a0514]">
+            <div className="max-w-6xl mx-auto space-y-6">
+              <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10">
+                <div>
+                  <h3 className="text-white font-medium">Archived Tasks</h3>
+                  <p className="text-sm text-slate-400">Past completed tasks preserved for analytics and reports.</p>
+                </div>
+                <div className="px-4 py-2 bg-brand-500/20 text-brand-300 rounded-lg border border-brand-500/30 font-semibold">
+                  Total: {archivedTasks.length}
+                </div>
+              </div>
+
+              {archivedTasks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-500 border border-dashed border-white/10 rounded-2xl">
+                  <History size={48} className="mb-4 opacity-50" />
+                  <p>No archived tasks found.</p>
+                </div>
+              ) : (
+                <div className="bg-[#120a21] border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-white/5 border-b border-white/10 text-slate-400">
+                      <tr>
+                        <th className="px-6 py-4 font-medium">Task Name</th>
+                        <th className="px-6 py-4 font-medium">Agent ID</th>
+                        <th className="px-6 py-4 font-medium">Priority</th>
+                        <th className="px-6 py-4 font-medium">Completed Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 text-slate-300">
+                      {archivedTasks.map(task => (
+                        <tr key={task.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 font-medium text-white">{task.title}</td>
+                          <td className="px-6 py-4">{task.agent_id}</td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 rounded text-xs border ${
+                                task.priority === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
+                                task.priority === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
+                                'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                            }`}>
+                              {task.priority || 'Medium'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-slate-400">{task.completed_date || task.completedDate}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Task History Sidebar */}
       {showHistorySidebar && (
