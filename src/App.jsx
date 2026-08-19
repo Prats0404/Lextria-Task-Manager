@@ -2761,7 +2761,7 @@ export default function App() {
                       <input
                         type="number"
                         min="1"
-                        placeholder="Amount"
+                        placeholder=""
                         value={customTimeVal}
                         onChange={(e) => setCustomTimeVal(e.target.value)}
                         className="glass-input text-xs w-24 py-1.5 px-3 font-sans"
