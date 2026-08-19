@@ -2517,8 +2517,19 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <Clock size={16} className="text-slate-400" />
                     {localRequiredTime ? (
-                      <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
-                        ⏱️ {localRequiredTime}
+                      <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5">
+                        <span>⏱️ {localRequiredTime}</span>
+                        <span
+                          role="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLocalRequiredTime('');
+                          }}
+                          className="hover:bg-cyan-400/30 p-0.5 rounded text-cyan-200 hover:text-white transition-colors cursor-pointer flex items-center justify-center"
+                          title="Remove required time"
+                        >
+                          <X size={12} />
+                        </span>
                       </span>
                     ) : (
                       <span className="text-slate-400 text-xs">Set required time (e.g. 10 min, 20 min, 2 hours)...</span>
@@ -2565,12 +2576,12 @@ export default function App() {
                       <select
                         value={customTimeUnit}
                         onChange={(e) => setCustomTimeUnit(e.target.value)}
-                        className="glass-input text-xs py-1.5 px-3 font-sans bg-[#120a21] text-white cursor-pointer rounded-lg border border-white/10"
+                        className="glass-input text-xs py-1.5 px-3 font-sans bg-[#160b2d] text-white cursor-pointer rounded-lg border border-white/15 focus:outline-none focus:ring-1 focus:ring-brand-400"
                       >
-                        <option value="min">Minutes (min)</option>
-                        <option value="hours">Hours (hr)</option>
-                        <option value="days">Days</option>
-                        <option value="weeks">Weeks</option>
+                        <option value="min" className="bg-[#160b2d] text-white py-1">Minutes (min)</option>
+                        <option value="hours" className="bg-[#160b2d] text-white py-1">Hours (hr)</option>
+                        <option value="days" className="bg-[#160b2d] text-white py-1">Days</option>
+                        <option value="weeks" className="bg-[#160b2d] text-white py-1">Weeks</option>
                       </select>
                       <button
                         type="button"
