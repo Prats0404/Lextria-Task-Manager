@@ -1115,9 +1115,7 @@ export default function App() {
               dueDate: t.due_date,
               reminderTime: t.reminder_time,
               screenshotUrl: t.screenshot_url,
-              requiredTime: (t.required_time && t.required_time !== 'Undefined') 
-                ? t.required_time 
-                : (t.tag && t.tag !== 'Undefined' ? t.tag : '')
+              requiredTime: t.required_time || ''
             }))
           }))
         }))
@@ -1588,12 +1586,10 @@ export default function App() {
     if (updates.completed !== undefined) dbUpdates.completed = updates.completed;
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
-    if (updates.tag !== undefined) dbUpdates.tag = updates.tag;
     if (updates.requiredTime !== undefined) {
-      const timeVal = updates.requiredTime ? updates.requiredTime.trim() : '';
-      dbUpdates.required_time = timeVal;
-      dbUpdates.tag = (timeVal && timeVal !== 'Undefined') ? timeVal : 'Undefined';
-    } else if (updates.tag !== undefined) {
+      dbUpdates.required_time = updates.requiredTime ? updates.requiredTime.trim() : '';
+    }
+    if (updates.tag !== undefined) {
       dbUpdates.tag = updates.tag;
     }
     if (updates.agent_id !== undefined) dbUpdates.agent_id = updates.agent_id;
@@ -2946,13 +2942,12 @@ export default function App() {
               <button 
                 type="button" 
                 onClick={async () => {
-                  const finalTag = localRequiredTime ? localRequiredTime : (localTag || 'Undefined');
                   const updates = {
                     title: localTitle,
                     description: localDescription,
                     completed: localStatus,
                     priority: localPriority,
-                    tag: finalTag,
+                    tag: localTag,
                     requiredTime: localRequiredTime,
                     dueDate: localDueDate,
                     reminderTime: localReminderTime,
