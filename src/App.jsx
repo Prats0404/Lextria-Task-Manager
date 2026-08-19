@@ -212,7 +212,7 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
 
   const completedHoursRaw = employee.tasks
     .filter(t => t.completed)
-    .reduce((sum, t) => sum + parseTimeToHours(t.requiredTime || t.tag), 0);
+    .reduce((sum, t) => sum + parseTimeToHours(t.requiredTime || t.required_time || t.tag), 0);
   const completedHours = Math.round(completedHoursRaw * 10) / 10;
   const hoursPct = Math.round((completedHoursRaw / 8) * 100);
   const isOvertime = completedHoursRaw > 8;
@@ -1115,7 +1115,7 @@ export default function App() {
               dueDate: t.due_date,
               reminderTime: t.reminder_time,
               screenshotUrl: t.screenshot_url,
-              requiredTime: t.required_time || ''
+              requiredTime: t.required_time || t.tag || ''
             }))
           }))
         }))
@@ -1587,7 +1587,10 @@ export default function App() {
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
     if (updates.tag !== undefined) dbUpdates.tag = updates.tag;
-    if (updates.requiredTime !== undefined) dbUpdates.required_time = updates.requiredTime;
+    if (updates.requiredTime !== undefined) {
+      dbUpdates.required_time = updates.requiredTime;
+      dbUpdates.tag = updates.requiredTime;
+    }
     if (updates.agent_id !== undefined) dbUpdates.agent_id = updates.agent_id;
     if (updates.screenshotUrl !== undefined) dbUpdates.screenshot_url = updates.screenshotUrl;
     if (updates.reminderTime !== undefined) {
