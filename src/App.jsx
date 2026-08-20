@@ -58,6 +58,13 @@ function formatDateToDDMMYY(dateStr) {
   }
   return dateStr;
 }
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function formatDateLong(dateInput) {
+  if (!dateInput) return '—';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return String(dateInput);
+  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+}
 function parseTimeToHours(timeStr) {
   if (!timeStr || timeStr === 'Undefined') return 0;
   const str = timeStr.toLowerCase().trim();
@@ -828,6 +835,13 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+
+  // Live Date & Time
+  const [liveDateTime, setLiveDateTime] = useState(new Date());
+  useEffect(() => {
+    const tick = setInterval(() => setLiveDateTime(new Date()), 1000);
+    return () => clearInterval(tick);
+  }, []);
   
   // Navigation State
   const [selectedDeptId, setSelectedDeptId] = useState(null);
@@ -2128,6 +2142,13 @@ export default function App() {
               </button>
             )}
 
+            {/* Live Date & Time */}
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-xs font-medium text-slate-300">
+              <span>📅 {formatDateLong(liveDateTime)}</span>
+              <span className="text-white/20">|</span>
+              <span>🕐 {liveDateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
+            </div>
+
             <button onClick={toggleAdmin} className={`p-2.5 rounded-xl transition-all ${isAdmin ? 'bg-brand-500/20 text-brand-300 shadow-[0_0_15px_rgba(124,58,237,0.3)]' : 'hover:bg-white/10 text-slate-300'}`} title="Admin Controls">
               {isAdmin ? <Unlock size={20} /> : <Lock size={20} />}
             </button>
@@ -3191,6 +3212,7 @@ export default function App() {
                         <th className="px-6 py-4 font-medium">Task Name</th>
                         <th className="px-6 py-4 font-medium">Agent Name</th>
                         <th className="px-6 py-4 font-medium">Priority</th>
+                        <th className="px-6 py-4 font-medium">Created Date</th>
                         <th className="px-6 py-4 font-medium">Completed Date</th>
                       </tr>
                     </thead>
@@ -3210,7 +3232,8 @@ export default function App() {
                               {task.priority || 'Medium'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-slate-400">{task.completed_date || task.completedDate}</td>
+                          <td className="px-6 py-4 text-slate-400">{formatDateLong(task.created_at)}</td>
+                          <td className="px-6 py-4 text-slate-400">{formatDateLong(task.completed_date || task.completedDate)}</td>
                         </tr>
                         );
                       })}
