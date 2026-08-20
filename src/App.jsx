@@ -199,7 +199,7 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
 }
 
 // --- SORTABLE EMPLOYEE CARD (KANBAN COLUMN) ---
-function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask, deleteTask, addTask, onTaskClick, priorityFilter, dueDateFilter }) {
+function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask, deleteTask, addTask, onTaskClick, priorityFilter, dueDateFilter, archivedTasks = [] }) {
   const [isAdding, setIsAdding] = useState(false);
   const [titleInput, setTitleInput] = useState('');
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -218,9 +218,16 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
   const progress = totalTasks === 0 ? 0 : Math.round((tasksCompleted / totalTasks) * 100);
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const completedHoursRaw = employee.tasks
+
+  const activeHours = employee.tasks
     .filter(t => t.completed && (t.completedDate || t.completed_date) === todayStr)
     .reduce((sum, t) => sum + parseTimeToHours(t.requiredTime || t.required_time || t.tag), 0);
+
+  const archivedHours = (archivedTasks || [])
+    .filter(t => (t.agent_id === employee.id || t.agentId === employee.id) && (t.completedDate || t.completed_date) === todayStr)
+    .reduce((sum, t) => sum + parseTimeToHours(t.requiredTime || t.required_time || t.tag), 0);
+
+  const completedHoursRaw = activeHours + archivedHours;
   const completedHours = Math.round(completedHoursRaw * 10) / 10;
   const hoursPct = Math.round((completedHoursRaw / 8) * 100);
   const isOvertime = completedHoursRaw > 8;
@@ -2082,8 +2089,12 @@ export default function App() {
     // Auto-archive past completed tasks
     allTasks.forEach(t => {
       if (t.completed && !t.is_archived) {
-        // Archive if completed_date is before today, OR if completed_date is missing (legacy tasks)
-        if (!t.completed_date || t.completed_date < today) {
+        if (!t.completed_date) {
+          // If task completed without timestamp, assign today's date so it stays active today
+          t.completed_date = today;
+          supabase.from('tasks').update({ completed_date: today }).eq('id', t.id).then();
+        } else if (t.completed_date < today) {
+          // Archive tasks completed on previous days
           t.is_archived = true;
           supabase.from('tasks').update({ is_archived: true }).eq('id', t.id).then();
         }
@@ -2525,6 +2536,13 @@ export default function App() {
   };
 
   const updateTask = async (empId, taskId, updates) => {
+    let localUpdates = { ...updates };
+    if (updates.completed !== undefined) {
+      const cDate = updates.completed ? new Date().toISOString().split('T')[0] : null;
+      localUpdates.completed_date = cDate;
+      localUpdates.completedDate = cDate;
+    }
+
     // Optimistic relocation across employees, boards, and departments
     setDepartments(prev => {
       let taskToMove = null;
@@ -2562,13 +2580,13 @@ export default function App() {
                 // Regular updates in-place
                 return {
                   ...e,
-                  tasks: e.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
+                  tasks: e.tasks.map(t => t.id === taskId ? { ...t, ...localUpdates } : t)
                 };
               }
             }
             // Case 2: The new assignee (append the task to their list with new updates)
             if (isMovingEmployee && e.id === updates.agent_id) {
-              const updatedTask = taskToMove ? { ...taskToMove, ...updates } : { id: taskId, ...updates };
+              const updatedTask = taskToMove ? { ...taskToMove, ...localUpdates } : { id: taskId, ...localUpdates };
               return {
                 ...e,
                 tasks: [...(e.tasks || []), updatedTask]
@@ -3239,6 +3257,7 @@ export default function App() {
                         onTaskClick={(empId, taskId) => setSelectedTaskDetails({ empId, taskId })}
                         priorityFilter={priorityFilter}
                         dueDateFilter={dueDateFilter}
+                        archivedTasks={archivedTasks}
                       />
                     ))}
                   </SortableContext>
@@ -3263,6 +3282,7 @@ export default function App() {
                         onTaskClick={()=>{}}
                         priorityFilter={priorityFilter}
                         dueDateFilter={dueDateFilter}
+                        archivedTasks={archivedTasks}
                       />
                     )}
                   </DragOverlay>
