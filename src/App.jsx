@@ -2541,6 +2541,43 @@ export default function App() {
       const cDate = updates.completed ? new Date().toISOString().split('T')[0] : null;
       localUpdates.completed_date = cDate;
       localUpdates.completedDate = cDate;
+      if (!updates.completed) {
+        localUpdates.is_archived = false;
+      }
+    }
+
+    // Handle restoring archived tasks if un-completed (Undo action)
+    if (updates.completed === false) {
+      setArchivedTasks(prev => {
+        const archivedTask = prev.find(t => t.id === taskId);
+        if (archivedTask) {
+          const targetEmpId = updates.agent_id || empId || archivedTask.agent_id;
+          setDepartments(deptPrev => deptPrev.map(d => ({
+            ...d,
+            boards: d.boards.map(b => ({
+              ...b,
+              employees: b.employees.map(e => {
+                if (e.id === targetEmpId) {
+                  const exists = e.tasks?.some(t => t.id === taskId);
+                  if (!exists) {
+                    const restoredTask = {
+                      ...archivedTask,
+                      ...localUpdates,
+                      completed: false,
+                      completed_date: null,
+                      completedDate: null,
+                      is_archived: false
+                    };
+                    return { ...e, tasks: [...(e.tasks || []), restoredTask] };
+                  }
+                }
+                return e;
+              })
+            }))
+          })));
+        }
+        return prev.filter(t => t.id !== taskId);
+      });
     }
 
     // Optimistic relocation across employees, boards, and departments
@@ -2608,6 +2645,7 @@ export default function App() {
         dbUpdates.completed_date = new Date().toISOString().split('T')[0];
       } else {
         dbUpdates.completed_date = null;
+        dbUpdates.is_archived = false;
       }
     }
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
@@ -4202,40 +4240,51 @@ export default function App() {
                     <p className="text-sm">No completed tasks found</p>
                   </div>
                 ) : (
-                  filteredCompletedTasks.map(({ task, emp }) => (
-                    <div key={task.id} className="glass-card p-4 border border-white/10 rounded-xl bg-white/5 flex flex-col gap-2 hover:bg-white/10 transition-all">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-semibold text-white line-through decoration-slate-500 truncate">{task.title}</h4>
-                          {task.description && (
-                            <p className="text-xs text-slate-400 mt-1 line-clamp-2">{task.description}</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => {
-                            // Uncomplete the task
-                            updateTask(emp.id, task.id, { completed: false });
-                          }}
-                          className="flex-shrink-0 p-1.5 rounded-lg hover:bg-brand-500/20 text-slate-400 hover:text-brand-400 transition-colors cursor-pointer"
-                          title="Restore task to board"
-                        >
-                          <RotateCcw size={14} />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between border-t border-white/5 pt-2 mt-1">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-5 h-5 rounded-full ${emp.color} flex items-center justify-center text-[9px] font-bold shadow`}>
-                            {getInitials(emp.name)}
+                  filteredCompletedTasks.map(({ task, emp }) => {
+                    const cDate = task.completed_date || task.completedDate || task.created_at;
+                    return (
+                      <div key={task.id} className="glass-card p-4 border border-white/10 rounded-xl bg-white/5 flex flex-col gap-2.5 hover:bg-white/10 transition-all group">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-semibold text-white line-through decoration-slate-500 truncate">{task.title}</h4>
+                            {task.description && (
+                              <p className="text-xs text-slate-400 mt-1 line-clamp-2">{task.description}</p>
+                            )}
                           </div>
-                          <span className="text-[11px] text-slate-300 truncate max-w-[120px]">{emp.name}</span>
+                          <button
+                            onClick={() => {
+                              updateTask(emp.id, task.id, { completed: false });
+                            }}
+                            className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-brand-500/20 hover:bg-brand-500/40 text-brand-300 border border-brand-500/30 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(37,99,235,0.2)]"
+                            title="Undo completion and restore task to Kanban board"
+                          >
+                            <RotateCcw size={13} /> Undo
+                          </button>
                         </div>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded border border-white/10 bg-white/5 text-slate-400 uppercase tracking-wider font-semibold">
-                          {task.priority}
-                        </span>
+
+                        <div className="flex items-center justify-between border-t border-white/5 pt-2 text-[11px]">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-5 h-5 rounded-full ${emp.color || 'bg-slate-500'} flex items-center justify-center text-[9px] font-bold shadow`}>
+                              {getInitials(emp.name)}
+                            </div>
+                            <span className="text-slate-300 font-medium truncate max-w-[110px]">{emp.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-300 text-[10px] flex items-center gap-1 font-medium bg-white/5 px-2 py-0.5 rounded border border-white/10" title="Completion Date">
+                              📅 {formatDateLong(cDate)}
+                            </span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-semibold ${
+                              task.priority === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                              task.priority === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                              'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                            }`}>
+                              {task.priority || 'Medium'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
