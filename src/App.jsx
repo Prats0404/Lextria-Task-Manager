@@ -640,55 +640,96 @@ function CompletionTrendChart({ tasks }) {
   );
 }
 
-function DepartmentBarChart({ departments }) {
+function DepartmentBarChart({ departments, allFlattenedTasks = [] }) {
   const [hoveredDept, setHoveredDept] = useState(null);
 
   const deptData = useMemo(() => {
-    return departments.map(dept => {
-      let total = 0;
-      let completed = 0;
-      dept.boards?.forEach(board => {
-        board.employees?.forEach(emp => {
-          emp.tasks?.forEach(t => {
-            total++;
-            if (t.completed) completed++;
-          });
-        });
-      });
-      const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
-      return { id: dept.id, name: dept.name, total, completed, pending: total - completed, pct };
-    });
-  }, [departments]);
+    const map = new Map();
 
-  const maxTotal = Math.max(...deptData.map(d => d.total), 5);
+    departments.forEach(dept => {
+      let boardCount = dept.boards?.length || 0;
+      let agentCount = 0;
+      dept.boards?.forEach(b => {
+        agentCount += b.employees?.length || 0;
+      });
+
+      map.set(dept.id, {
+        id: dept.id,
+        name: dept.name,
+        boardCount,
+        agentCount,
+        total: 0,
+        completed: 0,
+        hours: 0
+      });
+    });
+
+    allFlattenedTasks.forEach(t => {
+      let dId = t.deptId;
+      if (!map.has(dId)) {
+        const foundDept = departments.find(d => d.name === t.deptName);
+        if (foundDept) dId = foundDept.id;
+      }
+
+      if (map.has(dId)) {
+        const item = map.get(dId);
+        item.total += 1;
+        if (t.completed) {
+          item.completed += 1;
+          item.hours += parseTimeToHours(t.requiredTime);
+        }
+      }
+    });
+
+    return Array.from(map.values()).map(d => {
+      const pending = d.total - d.completed;
+      const pct = d.total === 0 ? 0 : Math.round((d.completed / d.total) * 100);
+      return { ...d, pending, pct, hours: Math.round(d.hours * 10) / 10 };
+    });
+  }, [departments, allFlattenedTasks]);
 
   return (
-    <div className="glass-card p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between h-full border border-white/10">
-      <div className="mb-4">
+    <div className="glass-card p-6 rounded-2xl relative overflow-hidden flex flex-col h-full border border-white/10 space-y-6">
+      <div>
         <h3 className="text-lg font-bold text-white flex items-center gap-2">
           <Building2 className="text-brand-400" size={18} /> Department Comparison
         </h3>
-        <p className="text-xs text-slate-400">Total vs Completed workload per department</p>
+        <p className="text-xs text-slate-400">Total vs Completed workload metrics per department</p>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-1">
         {deptData.map(d => (
           <div
             key={d.id}
-            className="space-y-1.5 group cursor-pointer"
+            className="p-4 bg-white/5 border border-white/5 hover:border-brand-500/30 rounded-xl transition-all space-y-3 group cursor-pointer"
             onMouseEnter={() => setHoveredDept(d)}
             onMouseLeave={() => setHoveredDept(null)}
           >
-            <div className="flex justify-between text-xs items-center">
-              <span className="text-white font-medium group-hover:text-brand-300 transition-colors">{d.name}</span>
-              <span className="text-slate-400 font-semibold">{d.completed} / {d.total} ({d.pct}%)</span>
+            <div className="flex justify-between items-center text-xs flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-white font-bold text-sm group-hover:text-brand-300 transition-colors">{d.name}</span>
+                <span className="text-[10px] text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md font-medium">
+                  {d.boardCount} Boards • {d.agentCount} Agents
+                </span>
+              </div>
+              <span className="text-slate-300 font-semibold text-xs">
+                <strong className="text-brand-400">{d.completed}</strong> / {d.total} Tasks ({d.pct}%)
+              </span>
             </div>
 
-            <div className="w-full h-4 bg-white/5 rounded-full overflow-hidden p-0.5 flex items-center border border-white/5 group-hover:border-brand-500/30 transition-all">
+            {/* Progress Bar */}
+            <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden p-0.5 flex items-center border border-white/5">
               <div
                 className="h-full bg-gradient-to-r from-brand-600 to-sky-400 rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(37,99,235,0.4)]"
-                style={{ width: `${(d.completed / maxTotal) * 100}%` }}
+                style={{ width: `${d.pct}%` }}
               />
+            </div>
+
+            {/* Metrics Breakdown Row */}
+            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-white/5">
+              <span>Completed: <strong className="text-green-400">{d.completed}</strong></span>
+              <span>Pending: <strong className="text-amber-400">{d.pending}</strong></span>
+              <span>Hours Tracked: <strong className="text-cyan-300">{d.hours} hrs</strong></span>
             </div>
           </div>
         ))}
@@ -697,14 +738,6 @@ function DepartmentBarChart({ departments }) {
           <p className="text-slate-500 text-xs text-center py-6">No department data available.</p>
         )}
       </div>
-
-      {hoveredDept && (
-        <div className="mt-4 p-3 bg-white/5 border border-white/10 rounded-xl text-xs flex items-center justify-between text-slate-300 animate-in fade-in duration-200">
-          <span>Department: <strong className="text-white">{hoveredDept.name}</strong></span>
-          <span className="text-green-400 font-semibold">{hoveredDept.completed} Completed</span>
-          <span className="text-amber-400 font-semibold">{hoveredDept.pending} Pending</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -1084,7 +1117,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <DepartmentBarChart departments={departments} />
+        <DepartmentBarChart departments={departments} allFlattenedTasks={allFlattenedTasks} />
 
         {/* Agent Leaderboard with Daily/Overall Toggle */}
         <div className="glass-card p-6">
