@@ -3,29 +3,29 @@
 @theme {
   --font-sans: 'Outfit', sans-serif;
 
-  --color-brand-50: #f5f3ff;
-  --color-brand-100: #ede9fe;
-  --color-brand-200: #ddd6fe;
-  --color-brand-300: #c4b5fd;
-  --color-brand-400: #a78bfa;
-  --color-brand-500: #8b5cf6;
-  --color-brand-600: #7c3aed; /* Electric violet */
-  --color-brand-700: #6d28d9;
-  --color-brand-800: #5b21b6;
-  --color-brand-900: #4c1d95;
+  --color-brand-50: #f0f6ff;
+  --color-brand-100: #e0edff;
+  --color-brand-200: #bae0ff;
+  --color-brand-300: #7cc2ff;
+  --color-brand-400: #38bdf8; /* Sky/Navy vibrant blue */
+  --color-brand-500: #2563eb; /* Royal navy blue */
+  --color-brand-600: #1d4ed8; /* Deep navy blue */
+  --color-brand-700: #1e3a8a; /* Midnight navy */
+  --color-brand-800: #0f256e;
+  --color-brand-900: #08103b;
 
-  --color-accent-400: #22d3ee;
-  --color-accent-500: #06b6d4; /* Cyan */
-  --color-accent-600: #0891b2;
+  --color-accent-400: #38bdf8;
+  --color-accent-500: #0284c7; /* Navy/Cyan accent */
+  --color-accent-600: #0369a1;
 
-  --color-dark-bg: #0a0a1a;
-  --color-dark-surface: rgba(26, 10, 46, 0.6);
+  --color-dark-bg: #03071b;
+  --color-dark-surface: rgba(11, 25, 60, 0.6);
 }
 
 @layer base {
   body {
-    @apply bg-[#0a0a1a] text-slate-100 overflow-x-hidden min-h-screen font-sans antialiased;
-    background: radial-gradient(circle at top left, #1a0a2e 0%, #0a0a1a 100%);
+    @apply bg-[#03071b] text-slate-100 overflow-x-hidden min-h-screen font-sans antialiased;
+    background: radial-gradient(circle at top left, #0b193c 0%, #03071b 100%);
   }
 }
 
@@ -53,7 +53,7 @@
   @apply bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all;
 }
 .glass-button {
-  @apply bg-brand-600/80 hover:bg-brand-500 backdrop-blur-md text-white font-medium py-2 px-4 rounded-lg transition-all shadow-[0_0_15px_rgba(124,58,237,0.5)] hover:shadow-[0_0_25px_rgba(124,58,237,0.8)];
+  @apply bg-brand-600/80 hover:bg-brand-500 backdrop-blur-md text-white font-medium py-2 px-4 rounded-lg transition-all shadow-[0_0_15px_rgba(37,99,235,0.5)] hover:shadow-[0_0_25px_rgba(37,99,235,0.8)];
 }
 
 .scrollbar-hide::-webkit-scrollbar {
@@ -68,10 +68,10 @@
 .custom-scrollbar {
   scroll-behavior: smooth;
   scrollbar-width: thin;
-  scrollbar-color: rgba(139, 92, 246, 0.4) rgba(255, 255, 255, 0.02);
+  scrollbar-color: rgba(37, 99, 235, 0.4) rgba(255, 255, 255, 0.02);
 }
 .custom-scrollbar::-webkit-scrollbar {
-  height: 10px; /* Slightly thicker for better visibility and easier grab */
+  height: 10px;
   width: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -80,20 +80,20 @@
   border: 1px solid rgba(255, 255, 255, 0.03);
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.35);
+  background: rgba(37, 99, 235, 0.35);
   border-radius: 9999px;
   border: 2px solid transparent;
-  background-clip: padding-box; /* Floating scrollbar look */
-  box-shadow: inset 0 0 0 10px rgba(139, 92, 246, 0.35);
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 10px rgba(37, 99, 235, 0.35);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(124, 58, 237, 0.7);
-  box-shadow: inset 0 0 0 10px rgba(124, 58, 237, 0.7), 0 0 12px rgba(124, 58, 237, 0.5);
+  background: rgba(29, 78, 216, 0.7);
+  box-shadow: inset 0 0 0 10px rgba(29, 78, 216, 0.7), 0 0 12px rgba(29, 78, 216, 0.5);
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:active {
-  background: rgba(167, 139, 250, 0.9);
-  box-shadow: inset 0 0 0 10px rgba(167, 139, 250, 0.9), 0 0 18px rgba(167, 139, 250, 0.8);
+  background: rgba(56, 189, 248, 0.9);
+  box-shadow: inset 0 0 0 10px rgba(56, 189, 248, 0.9), 0 0 18px rgba(56, 189, 248, 0.8);
 }
 
 @keyframes shrinkBar {
@@ -113,8 +113,8 @@
 }
 
 @keyframes splashGlowPulse {
-  0%, 100% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.0), 0 0 80px rgba(139, 92, 246, 0.0); }
-  50% { box-shadow: 0 0 60px rgba(139, 92, 246, 0.4), 0 0 120px rgba(139, 92, 246, 0.2); }
+  0%, 100% { box-shadow: 0 0 40px rgba(37, 99, 235, 0.0), 0 0 80px rgba(37, 99, 235, 0.0); }
+  50% { box-shadow: 0 0 60px rgba(37, 99, 235, 0.4), 0 0 120px rgba(37, 99, 235, 0.2); }
 }
 
 @keyframes splashExit {
@@ -135,7 +135,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #0a0a1a;
+  background: #03071b;
   overflow: hidden;
 }
 
@@ -147,26 +147,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Circular mask — sized to show the full logo emblem */
   width: 280px;
   height: 280px;
   border-radius: 50%;
   overflow: hidden;
-  /* Decorative glow ring */
   box-shadow:
-    0 0 0 3px rgba(139, 92, 246, 0.4),
-    0 0 40px rgba(139, 92, 246, 0.2),
-    0 0 80px rgba(139, 92, 246, 0.1);
+    0 0 0 3px rgba(37, 99, 235, 0.4),
+    0 0 40px rgba(37, 99, 235, 0.2),
+    0 0 80px rgba(37, 99, 235, 0.1);
   animation: splashFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards,
              splashGlowPulse 2s ease-in-out 0.8s infinite;
 }
 
 .splash-video-wrapper video {
-  /* Video is 1920×1080. We display it at height≈310px so the full
-     video height (including the logo circle) fits inside the 280px
-     wrapper with just a tiny zoom to push white padding edges out.
-     Width at 310px height = 310 × 1.778 = 551px — the circle clips
-     the horizontal white areas while the centered logo stays fully visible. */
   width: auto;
   height: 310px;
   object-fit: cover;
@@ -181,7 +174,7 @@
   font-family: 'Outfit', sans-serif;
   font-size: 1.5rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #ffffff 0%, #a78bfa 50%, #22d3ee 100%);
+  background: linear-gradient(135deg, #ffffff 0%, #60a5fa 50%, #38bdf8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -202,7 +195,7 @@
 
 .splash-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #8b5cf6, #22d3ee);
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
   border-radius: 9999px;
-  box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.6);
 }

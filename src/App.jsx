@@ -248,7 +248,7 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
     <div
       ref={setNodeRef}
       style={style}
-      className={`glass-card flex flex-col w-[320px] h-[580px] flex-shrink-0 transition-all duration-300 rounded-2xl overflow-hidden ${isDragging ? 'shadow-[0_0_30px_rgba(124,58,237,0.5)]' : ''}`}
+      className={`glass-card flex flex-col w-[320px] h-[580px] flex-shrink-0 transition-all duration-300 rounded-2xl overflow-hidden ${isDragging ? 'shadow-[0_0_30px_rgba(37,99,235,0.5)]' : ''}`}
     >
       <div className="p-4 bg-white/5 border-b border-white/10 relative group">
         <div {...attributes} {...listeners} className="absolute top-2 left-2 cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300">
@@ -478,33 +478,28 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [quickPreset, setQuickPreset] = useState('ALL_TIME');
+  const [agentFilterMode, setAgentFilterMode] = useState('OVERALL'); // 'OVERALL' | 'DAILY'
+
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   // Compute Stats across active departments
   let totalTasks = 0;
   let completedTasks = 0;
   const deptStats = [];
-  const agentStats = [];
 
   departments.forEach(dept => {
     let deptTotal = 0;
     let deptCompleted = 0;
     dept.boards?.forEach(board => {
       board.employees?.forEach(emp => {
-        let empTotal = 0;
-        let empCompleted = 0;
         emp.tasks?.forEach(task => {
           totalTasks++;
           deptTotal++;
-          empTotal++;
           if (task.completed) {
             completedTasks++;
             deptCompleted++;
-            empCompleted++;
           }
         });
-        if (empTotal > 0) {
-          agentStats.push({ id: emp.id, name: emp.name, completed: empCompleted, total: empTotal, deptId: dept.id, deptName: dept.name });
-        }
       });
     });
     deptStats.push({ id: dept.id, name: dept.name, total: deptTotal, completed: deptCompleted });
@@ -512,9 +507,35 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
 
   const overallPct = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
-  // Sort agents by completed tasks (Leaderboard)
-  agentStats.sort((a, b) => b.completed - a.completed);
-  const topAgents = agentStats.slice(0, 10);
+  // Top Agents Leaderboard calculation (Overall vs Daily)
+  const topAgents = useMemo(() => {
+    const list = [];
+    departments.forEach(dept => {
+      dept.boards?.forEach(board => {
+        board.employees?.forEach(emp => {
+          let count = 0;
+          emp.tasks?.forEach(task => {
+            if (task.completed) {
+              if (agentFilterMode === 'DAILY') {
+                const cDate = task.completed_date || task.completedDate;
+                if (cDate === todayStr) {
+                  count++;
+                }
+              } else {
+                count++;
+              }
+            }
+          });
+          if (count > 0 || agentFilterMode === 'OVERALL') {
+            list.push({ id: emp.id, name: emp.name, completed: count, deptName: dept.name });
+          }
+        });
+      });
+    });
+
+    list.sort((a, b) => b.completed - a.completed);
+    return list.slice(0, 10);
+  }, [departments, agentFilterMode, todayStr]);
 
   // Flatten all tasks (active + archived) for custom filtering & reports
   const allFlattenedTasks = useMemo(() => {
@@ -606,25 +627,25 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
   const applyPreset = (presetKey) => {
     setQuickPreset(presetKey);
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStrVal = today.toISOString().split('T')[0];
 
     if (presetKey === 'TODAY') {
-      setStartDate(todayStr);
-      setEndDate(todayStr);
+      setStartDate(todayStrVal);
+      setEndDate(todayStrVal);
     } else if (presetKey === 'LAST_7') {
       const d7 = new Date(today);
       d7.setDate(d7.getDate() - 7);
       setStartDate(d7.toISOString().split('T')[0]);
-      setEndDate(todayStr);
+      setEndDate(todayStrVal);
     } else if (presetKey === 'LAST_30') {
       const d30 = new Date(today);
       d30.setDate(d30.getDate() - 30);
       setStartDate(d30.toISOString().split('T')[0]);
-      setEndDate(todayStr);
+      setEndDate(todayStrVal);
     } else if (presetKey === 'THIS_MONTH') {
       const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
       setStartDate(firstDay.toISOString().split('T')[0]);
-      setEndDate(todayStr);
+      setEndDate(todayStrVal);
     } else if (presetKey === 'ALL_TIME') {
       setStartDate('');
       setEndDate('');
@@ -682,7 +703,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
           <p className="text-slate-400">Total metrics across all departments and boards.</p>
           <button
             onClick={() => openReportModalForDept('ALL')}
-            className="mt-4 px-4 py-2 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(124,58,237,0.4)] hover:shadow-[0_0_25px_rgba(124,58,237,0.6)] transition-all active:scale-95 cursor-pointer"
+            className="mt-4 px-4 py-2 bg-gradient-to-r from-brand-600 to-blue-600 hover:from-brand-500 hover:to-blue-500 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:shadow-[0_0_25px_rgba(37,99,235,0.6)] transition-all active:scale-95 cursor-pointer"
           >
             <Download size={14} /> Generate Custom Report
           </button>
@@ -716,7 +737,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                     <span className="text-slate-400">{ds.total} Tasks</span>
                     <button
                       onClick={() => openReportModalForDept(ds.id)}
-                      className="px-2.5 py-1 text-xs bg-brand-500/20 hover:bg-brand-500/40 text-brand-300 border border-brand-500/30 rounded-lg flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(124,58,237,0.2)] hover:shadow-[0_0_15px_rgba(124,58,237,0.4)] cursor-pointer active:scale-95"
+                      className="px-2.5 py-1 text-xs bg-brand-500/20 hover:bg-brand-500/40 text-brand-300 border border-brand-500/30 rounded-lg flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(37,99,235,0.2)] hover:shadow-[0_0_15px_rgba(37,99,235,0.4)] cursor-pointer active:scale-95"
                       title={`Download detailed report for ${ds.name}`}
                     >
                       <Download size={12} /> Download Report
@@ -724,7 +745,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                   </div>
                 </div>
                 <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden flex">
-                  <div className="h-full bg-cyan-500 rounded-l-full transition-all duration-1000" style={{ width: `${ds.total === 0 ? 0 : (ds.completed / ds.total) * 100}%` }}></div>
+                  <div className="h-full bg-sky-500 rounded-l-full transition-all duration-1000" style={{ width: `${ds.total === 0 ? 0 : (ds.completed / ds.total) * 100}%` }}></div>
                   <div className="h-full bg-slate-600/50 flex-1"></div>
                 </div>
               </div>
@@ -733,14 +754,44 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
           </div>
         </div>
 
-        {/* Agent Leaderboard */}
+        {/* Agent Leaderboard with Daily/Overall Toggle */}
         <div className="glass-card p-6">
-          <h3 className="text-xl font-bold text-white mb-6 border-b border-white/10 pb-4 flex items-center gap-2">Top Agents <span className="bg-brand-500/20 text-brand-300 text-xs px-2 py-0.5 rounded-full">Completed Tasks</span></h3>
+          <div className="flex items-center justify-between mb-6 border-b border-white/10 pb-4 flex-wrap gap-2">
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              Top Agents 
+              <span className="bg-brand-500/20 text-brand-300 text-xs px-2 py-0.5 rounded-full font-medium">
+                Leaderboard
+              </span>
+            </h3>
+            {/* Toggle Mode Switch Pill */}
+            <div className="flex items-center p-1 bg-white/5 border border-white/10 rounded-xl text-xs">
+              <button
+                onClick={() => setAgentFilterMode('OVERALL')}
+                className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  agentFilterMode === 'OVERALL'
+                    ? 'bg-brand-500 text-white shadow-[0_0_12px_rgba(37,99,235,0.5)] font-semibold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Overall
+              </button>
+              <button
+                onClick={() => setAgentFilterMode('DAILY')}
+                className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  agentFilterMode === 'DAILY'
+                    ? 'bg-brand-500 text-white shadow-[0_0_12px_rgba(37,99,235,0.5)] font-semibold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Daily
+              </button>
+            </div>
+          </div>
           <div className="space-y-4">
             {topAgents.map((ag, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+              <div key={ag.id || i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${i === 0 ? 'bg-yellow-500 text-yellow-900 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : i === 1 ? 'bg-slate-300 text-slate-800' : i === 2 ? 'bg-orange-700 text-white' : 'bg-white/10 text-slate-400'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${i === 0 ? 'bg-amber-400 text-amber-950 shadow-[0_0_15px_rgba(251,191,36,0.5)]' : i === 1 ? 'bg-slate-300 text-slate-800' : i === 2 ? 'bg-amber-700 text-white' : 'bg-white/10 text-slate-400'}`}>
                     #{i + 1}
                   </div>
                   <div>
@@ -750,19 +801,25 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                 </div>
                 <div className="text-right">
                   <div className="text-xl font-bold text-brand-400">{ag.completed}</div>
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">Completed</div>
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">
+                    {agentFilterMode === 'DAILY' ? 'Today' : 'Completed'}
+                  </div>
                 </div>
               </div>
             ))}
-            {topAgents.length === 0 && <p className="text-slate-500 text-center">No active agents.</p>}
+            {topAgents.length === 0 && (
+              <p className="text-slate-500 text-center py-6">
+                {agentFilterMode === 'DAILY' ? 'No tasks completed today.' : 'No active agents.'}
+              </p>
+            )}
           </div>
         </div>
       </div>
 
       {/* Glassmorphism Report Generation & Filter Modal */}
       {showReportModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="glass-card border border-brand-500/30 w-full max-w-4xl p-6 rounded-2xl shadow-[0_0_50px_rgba(124,58,237,0.3)] bg-[#0f0724]/95 text-slate-200 space-y-6 relative max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="glass-card border border-brand-500/30 w-full max-w-4xl p-6 rounded-2xl shadow-[0_0_50px_rgba(37,99,235,0.3)] bg-[#050c26]/95 text-slate-200 space-y-6 relative max-h-[90vh] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <div className="flex items-center gap-3">
@@ -799,7 +856,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                         setReportDeptId(e.target.value);
                         setReportAgentId('ALL');
                       }}
-                      className="w-full bg-[#170c36] border border-white/15 text-white text-xs rounded-xl p-2.5 focus:border-brand-500 focus:outline-none transition-all cursor-pointer"
+                      className="w-full bg-[#0c173c] border border-white/15 text-white text-xs rounded-xl p-2.5 focus:border-brand-500 focus:outline-none transition-all cursor-pointer"
                     >
                       <option value="ALL">All Departments</option>
                       {departments.map(d => (
@@ -814,7 +871,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                     <select
                       value={reportAgentId}
                       onChange={(e) => setReportAgentId(e.target.value)}
-                      className="w-full bg-[#170c36] border border-white/15 text-white text-xs rounded-xl p-2.5 focus:border-brand-500 focus:outline-none transition-all cursor-pointer"
+                      className="w-full bg-[#0c173c] border border-white/15 text-white text-xs rounded-xl p-2.5 focus:border-brand-500 focus:outline-none transition-all cursor-pointer"
                     >
                       <option value="ALL">All Agents ({availableAgents.length})</option>
                       {availableAgents.map(ag => (
@@ -833,7 +890,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                         setStartDate(e.target.value);
                         setQuickPreset('CUSTOM');
                       }}
-                      className="w-full bg-[#170c36] border border-white/15 text-white text-xs rounded-xl p-2 focus:border-brand-500 focus:outline-none transition-all"
+                      className="w-full bg-[#0c173c] border border-white/15 text-white text-xs rounded-xl p-2 focus:border-brand-500 focus:outline-none transition-all"
                     />
                   </div>
 
@@ -847,7 +904,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                         setEndDate(e.target.value);
                         setQuickPreset('CUSTOM');
                       }}
-                      className="w-full bg-[#170c36] border border-white/15 text-white text-xs rounded-xl p-2 focus:border-brand-500 focus:outline-none transition-all"
+                      className="w-full bg-[#0c173c] border border-white/15 text-white text-xs rounded-xl p-2 focus:border-brand-500 focus:outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -867,7 +924,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                       onClick={() => applyPreset(preset.key)}
                       className={`text-xs px-3 py-1 rounded-lg border transition-all cursor-pointer ${
                         quickPreset === preset.key
-                          ? 'bg-brand-500/30 text-brand-300 border-brand-500/50 shadow-[0_0_10px_rgba(124,58,237,0.3)] font-semibold'
+                          ? 'bg-brand-500/30 text-brand-300 border-brand-500/50 shadow-[0_0_10px_rgba(37,99,235,0.3)] font-semibold'
                           : 'bg-white/5 hover:bg-white/10 text-slate-400 border-white/10'
                       }`}
                     >
@@ -889,7 +946,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                 </div>
                 <div className="bg-white/5 border border-white/10 p-3.5 rounded-xl text-center">
                   <div className="text-slate-400 text-xs font-medium">Hours Tracked</div>
-                  <div className="text-xl font-bold text-cyan-400 mt-1">{reportTotalHours} hrs</div>
+                  <div className="text-xl font-bold text-sky-400 mt-1">{reportTotalHours} hrs</div>
                 </div>
                 <div className="bg-white/5 border border-white/10 p-3.5 rounded-xl text-center">
                   <div className="text-slate-400 text-xs font-medium">Completion Rate</div>
@@ -898,7 +955,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
               </div>
 
               {/* Report Data Table Preview */}
-              <div className="bg-[#120a21] border border-white/10 rounded-xl overflow-hidden shadow-inner">
+              <div className="bg-[#07102e] border border-white/10 rounded-xl overflow-hidden shadow-inner">
                 <div className="p-3 bg-white/5 border-b border-white/10 flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-300">Report Preview ({filteredReportTasks.length} records)</span>
                 </div>
@@ -968,7 +1025,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                   disabled={filteredReportTasks.length === 0}
                   className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all cursor-pointer ${
                     filteredReportTasks.length > 0
-                      ? 'bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white shadow-[0_0_20px_rgba(124,58,237,0.5)] active:scale-95'
+                      ? 'bg-gradient-to-r from-brand-600 to-blue-600 hover:from-brand-500 hover:to-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.5)] active:scale-95'
                       : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
                   }`}
                 >
@@ -2506,7 +2563,7 @@ export default function App() {
             </div>
             {/* Search Results Dropdown */}
             {searchQuery.trim().length > 0 && (
-              <div className="absolute top-full mt-2 w-full bg-[#0f0724]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden max-h-[400px] overflow-y-auto">
+              <div className="absolute top-full mt-2 w-full bg-[#050c26]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden max-h-[400px] overflow-y-auto">
                 {(() => {
                   const query = searchQuery.toLowerCase();
                   const results = [];
@@ -2557,7 +2614,7 @@ export default function App() {
             {notificationPermission === 'default' && (
               <button 
                 onClick={requestNotificationPermission} 
-                className="flex items-center gap-2 text-xs font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30 px-3 py-1.5 rounded-xl hover:bg-brand-500/30 transition-all shadow-[0_0_10px_rgba(124,58,237,0.15)] hover:shadow-[0_0_15px_rgba(124,58,237,0.3)] animate-pulse"
+                className="flex items-center gap-2 text-xs font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30 px-3 py-1.5 rounded-xl hover:bg-brand-500/30 transition-all shadow-[0_0_10px_rgba(37,99,235,0.15)] hover:shadow-[0_0_15px_rgba(37,99,235,0.3)] animate-pulse"
               >
                 <Bell size={14} /> Enable Desktop Alerts
               </button>
@@ -2584,7 +2641,7 @@ export default function App() {
             {isAdmin && (
               <button 
                 onClick={() => setShowAnalytics(!showAnalytics)} 
-                className={`p-2.5 rounded-xl transition-all flex items-center gap-2 ${showAnalytics ? 'bg-brand-500 text-white shadow-[0_0_15px_rgba(124,58,237,0.5)]' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                className={`p-2.5 rounded-xl transition-all flex items-center gap-2 ${showAnalytics ? 'bg-brand-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
                 title="Analytics Dashboard"
               >
                 <BarChart3 size={18} />
@@ -2599,7 +2656,7 @@ export default function App() {
               <span>🕐 {liveDateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
             </div>
 
-            <button onClick={toggleAdmin} className={`p-2.5 rounded-xl transition-all ${isAdmin ? 'bg-brand-500/20 text-brand-300 shadow-[0_0_15px_rgba(124,58,237,0.3)]' : 'hover:bg-white/10 text-slate-300'}`} title="Admin Controls">
+            <button onClick={toggleAdmin} className={`p-2.5 rounded-xl transition-all ${isAdmin ? 'bg-brand-500/20 text-brand-300 shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'hover:bg-white/10 text-slate-300'}`} title="Admin Controls">
               {isAdmin ? <Unlock size={20} /> : <Lock size={20} />}
             </button>
           </div>
@@ -3079,7 +3136,7 @@ export default function App() {
       {activeTaskDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedTaskDetails(null)} />
-          <div className="glass-card relative w-full max-w-2xl bg-[#120a21]/95 backdrop-blur-xl border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col animate-in fade-in zoom-in duration-200 max-h-[90vh]">
+          <div className="glass-card relative w-full max-w-2xl bg-[#07102e]/95 backdrop-blur-xl border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col animate-in fade-in zoom-in duration-200 max-h-[90vh]">
             <div className="p-5 border-b border-white/10 flex items-center justify-between bg-white/5 rounded-t-2xl">
               <h2 className="text-xl font-bold text-white">Task Details</h2>
               <button onClick={() => setSelectedTaskDetails(null)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer"><X size={18} /></button>
@@ -3105,7 +3162,7 @@ export default function App() {
                  </button>
 
                  {showAssigneePopover && (
-                   <div className="absolute left-0 right-0 mt-2 z-20 bg-[#160b2d]/98 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-xl p-3 w-full animate-in fade-in duration-200">
+                   <div className="absolute left-0 right-0 mt-2 z-20 bg-[#0a1438]/98 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-xl p-3 w-full animate-in fade-in duration-200">
                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Assign to Employee</div>
                      
                      {/* Search Box */}
@@ -3209,7 +3266,7 @@ export default function App() {
                 </button>
 
                 {showRequiredTimePopover && (
-                  <div className="absolute left-0 right-0 mt-2 z-30 bg-[#160b2d]/98 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-xl p-4 w-full animate-in fade-in duration-200">
+                  <div className="absolute left-0 right-0 mt-2 z-30 bg-[#0a1438]/98 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-xl p-4 w-full animate-in fade-in duration-200">
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Presets</div>
                     
                     {/* Presets Grid */}
@@ -3246,12 +3303,12 @@ export default function App() {
                       <select
                         value={customTimeUnit}
                         onChange={(e) => setCustomTimeUnit(e.target.value)}
-                        className="glass-input text-xs py-1.5 px-3 font-sans bg-[#160b2d] text-white cursor-pointer rounded-lg border border-white/15 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                        className="glass-input text-xs py-1.5 px-3 font-sans bg-[#0a1438] text-white cursor-pointer rounded-lg border border-white/15 focus:outline-none focus:ring-1 focus:ring-brand-400"
                       >
-                        <option value="min" className="bg-[#160b2d] text-white py-1">Minutes (min)</option>
-                        <option value="hours" className="bg-[#160b2d] text-white py-1">Hours (hr)</option>
-                        <option value="days" className="bg-[#160b2d] text-white py-1">Days</option>
-                        <option value="weeks" className="bg-[#160b2d] text-white py-1">Weeks</option>
+                        <option value="min" className="bg-[#0a1438] text-white py-1">Minutes (min)</option>
+                        <option value="hours" className="bg-[#0a1438] text-white py-1">Hours (hr)</option>
+                        <option value="days" className="bg-[#0a1438] text-white py-1">Days</option>
+                        <option value="weeks" className="bg-[#0a1438] text-white py-1">Weeks</option>
                       </select>
                       <button
                         type="button"
@@ -3627,8 +3684,8 @@ export default function App() {
 
       {/* Task Archive & Reports Page */}
       {showArchivePage && isAdmin && (
-        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col animate-in fade-in zoom-in-95 duration-200">
-          <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#120a21]">
+        <div className="fixed inset-0 z-[60] bg-[#03071b] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#07102e]">
             <div className="flex items-center gap-3">
               <Building2 className="text-brand-400" size={24} />
               <h2 className="text-2xl font-bold text-white">Archive & Reports</h2>
@@ -3637,7 +3694,7 @@ export default function App() {
               <X size={20} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-6 bg-[#0a0514]">
+          <div className="flex-1 overflow-y-auto p-6 bg-[#03071b]">
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10">
                 <div>
@@ -3655,7 +3712,7 @@ export default function App() {
                   <p>No archived tasks found.</p>
                 </div>
               ) : (
-                <div className="bg-[#120a21] border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                <div className="bg-[#07102e] border border-white/10 rounded-xl overflow-hidden shadow-xl">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-white/5 border-b border-white/10 text-slate-400">
                       <tr>
@@ -3703,7 +3760,7 @@ export default function App() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity animate-in fade-in duration-200" onClick={() => setShowHistorySidebar(false)} />
           
           <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
-            <div className="w-screen max-w-md bg-[#120a21]/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="w-screen max-w-md bg-[#07102e]/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
               {/* Sidebar Header */}
               <div className="p-5 border-b border-white/10 flex items-center justify-between bg-white/5 rounded-tl-2xl">
                 <div className="flex items-center gap-2">
