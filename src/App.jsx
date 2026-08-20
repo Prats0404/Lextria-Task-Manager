@@ -2285,6 +2285,7 @@ export default function App() {
                     </span>
                   )}
                 </button>
+                {isAdmin && (
                 <button 
                   onClick={() => setShowArchivePage(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-slate-300 hover:text-white transition-all shadow-md active:scale-95 cursor-pointer"
@@ -2292,6 +2293,7 @@ export default function App() {
                   <Building2 size={16} className="text-slate-400" />
                   <span>Archive & Reports</span>
                 </button>
+                )}
                 <button onClick={() => setSelectedBoardId(null)} className="glass-button text-sm py-2 px-4 flex items-center gap-2"><ArrowLeft size={16}/> Back</button>
               </div>
             </div>
@@ -3153,7 +3155,7 @@ export default function App() {
       </div>
 
       {/* Task Archive & Reports Page */}
-      {showArchivePage && (
+      {showArchivePage && isAdmin && (
         <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#120a21]">
             <div className="flex items-center gap-3">
