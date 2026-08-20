@@ -2833,18 +2833,41 @@ export default function App() {
   }, [selectedTaskDetails, departments]);
 
   const completedTasks = useMemo(() => {
-    if (!currentBoard) return [];
     const list = [];
-    currentBoard.employees?.forEach(emp => {
-      emp.tasks?.forEach(task => {
-        if (task.completed) {
-          list.push({ task, emp });
-        }
+    const empMap = new Map();
+
+    departments.forEach(dept => {
+      dept.boards?.forEach(board => {
+        board.employees?.forEach(emp => {
+          empMap.set(emp.id, emp);
+          emp.tasks?.forEach(task => {
+            if (task.completed) {
+              list.push({ task, emp, boardName: board.name, deptName: dept.name });
+            }
+          });
+        });
       });
     });
-    // Sort in reverse chronological order (latest created at the top)
-    return list.sort((a, b) => new Date(b.task.created_at || 0) - new Date(a.task.created_at || 0));
-  }, [currentBoard]);
+
+    (archivedTasks || []).forEach(task => {
+      const emp = empMap.get(task.agent_id) || { id: task.agent_id, name: 'Agent', color: 'bg-slate-500' };
+      list.push({
+        task: {
+          id: task.id,
+          title: task.title || 'Untitled Task',
+          description: task.description || '',
+          completed: true,
+          completed_date: task.completed_date || task.completedDate,
+          created_at: task.created_at || task.createdAt
+        },
+        emp,
+        boardName: 'Archived',
+        deptName: 'Archived'
+      });
+    });
+
+    return list.sort((a, b) => new Date(b.task.completed_date || b.task.created_at || 0) - new Date(a.task.completed_date || a.task.created_at || 0));
+  }, [departments, archivedTasks]);
 
   const filteredCompletedTasks = useMemo(() => {
     if (!searchHistoryQuery.trim()) return completedTasks;
