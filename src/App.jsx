@@ -507,36 +507,6 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
 
   const overallPct = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
-  // Top Agents Leaderboard calculation (Overall vs Daily)
-  const topAgents = useMemo(() => {
-    const list = [];
-    departments.forEach(dept => {
-      dept.boards?.forEach(board => {
-        board.employees?.forEach(emp => {
-          let count = 0;
-          emp.tasks?.forEach(task => {
-            if (task.completed) {
-              if (agentFilterMode === 'DAILY') {
-                const cDate = task.completed_date || task.completedDate;
-                if (cDate === todayStr) {
-                  count++;
-                }
-              } else {
-                count++;
-              }
-            }
-          });
-          if (count > 0 || agentFilterMode === 'OVERALL') {
-            list.push({ id: emp.id, name: emp.name, completed: count, deptName: dept.name });
-          }
-        });
-      });
-    });
-
-    list.sort((a, b) => b.completed - a.completed);
-    return list.slice(0, 10);
-  }, [departments, agentFilterMode, todayStr]);
-
   // Flatten all tasks (active + archived) for custom filtering & reports
   const allFlattenedTasks = useMemo(() => {
     const list = [];
@@ -605,6 +575,55 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
 
     return list;
   }, [departments, archivedTasks]);
+
+  // Top Agents Leaderboard calculation (Overall vs Daily) including archived tasks
+  const topAgents = useMemo(() => {
+    const agentMap = new Map();
+
+    departments.forEach(dept => {
+      dept.boards?.forEach(board => {
+        board.employees?.forEach(emp => {
+          agentMap.set(emp.id, {
+            id: emp.id,
+            name: emp.name,
+            deptName: dept.name,
+            completed: 0
+          });
+        });
+      });
+    });
+
+    allFlattenedTasks.forEach(t => {
+      if (!t.completed) return;
+
+      if (agentFilterMode === 'DAILY') {
+        if (t.completedDate !== todayStr) return;
+      }
+
+      if (agentMap.has(t.agentId)) {
+        agentMap.get(t.agentId).completed += 1;
+      } else if (t.agentId && t.agentName) {
+        agentMap.set(t.agentId, {
+          id: t.agentId,
+          name: t.agentName,
+          deptName: t.deptName || 'General',
+          completed: 1
+        });
+      }
+    });
+
+    const list = Array.from(agentMap.values());
+    if (agentFilterMode === 'DAILY') {
+      const activeToday = list.filter(a => a.completed > 0);
+      activeToday.sort((a, b) => b.completed - a.completed);
+      return activeToday.slice(0, 10);
+    }
+
+    list.sort((a, b) => b.completed - a.completed);
+    return list.slice(0, 10);
+  }, [departments, allFlattenedTasks, agentFilterMode, todayStr]);
+
+
 
   // List of agents for selector dropdowns (filtered by chosen department)
   const availableAgents = useMemo(() => {
