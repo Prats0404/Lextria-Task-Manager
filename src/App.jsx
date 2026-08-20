@@ -210,8 +210,9 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
   const totalTasks = employee.tasks.length;
   const progress = totalTasks === 0 ? 0 : Math.round((tasksCompleted / totalTasks) * 100);
 
+  const todayStr = new Date().toISOString().split('T')[0];
   const completedHoursRaw = employee.tasks
-    .filter(t => t.completed)
+    .filter(t => t.completed && (t.completedDate || t.completed_date) === todayStr)
     .reduce((sum, t) => sum + parseTimeToHours(t.requiredTime || t.required_time || t.tag), 0);
   const completedHours = Math.round(completedHoursRaw * 10) / 10;
   const hoursPct = Math.round((completedHoursRaw / 8) * 100);
@@ -1194,9 +1195,12 @@ export default function App() {
     
     // Auto-archive past completed tasks
     allTasks.forEach(t => {
-      if (t.completed && !t.is_archived && t.completed_date && t.completed_date < today) {
-        t.is_archived = true;
-        supabase.from('tasks').update({ is_archived: true }).eq('id', t.id).then();
+      if (t.completed && !t.is_archived) {
+        // Archive if completed_date is before today, OR if completed_date is missing (legacy tasks)
+        if (!t.completed_date || t.completed_date < today) {
+          t.is_archived = true;
+          supabase.from('tasks').update({ is_archived: true }).eq('id', t.id).then();
+        }
       }
     });
 
