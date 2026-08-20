@@ -470,6 +470,336 @@ function downloadCSVReport(tasks, reportTitle) {
   document.body.removeChild(link);
 }
 
+// --- INTERACTIVE ANALYTICS CHARTS ---
+function CompletionTrendChart({ tasks }) {
+  const [daysRange, setDaysRange] = useState(14);
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+
+  const trendData = useMemo(() => {
+    const data = [];
+    const today = new Date();
+
+    for (let i = daysRange - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const label = `${d.getDate()} ${MONTH_NAMES[d.getMonth()].substring(0, 3)}`;
+
+      let count = 0;
+      let hours = 0;
+
+      tasks.forEach(t => {
+        if (t.completed) {
+          const cDate = t.completedDate || (t.createdAt ? t.createdAt.split('T')[0] : '');
+          if (cDate === dateStr) {
+            count++;
+            hours += parseTimeToHours(t.requiredTime);
+          }
+        }
+      });
+
+      data.push({ dateStr, label, count, hours: Math.round(hours * 10) / 10 });
+    }
+
+    return data;
+  }, [tasks, daysRange]);
+
+  const maxVal = Math.max(...trendData.map(d => d.count), 5);
+  const width = 600;
+  const height = 220;
+  const padding = 35;
+
+  const points = trendData.map((d, i) => {
+    const x = padding + (i / (trendData.length - 1)) * (width - padding * 2);
+    const y = height - padding - (d.count / maxVal) * (height - padding * 2);
+    return { ...d, x, y };
+  });
+
+  const pathD = points.length > 0
+    ? points.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '')
+    : '';
+
+  const areaD = points.length > 0
+    ? `${pathD} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`
+    : '';
+
+  return (
+    <div className="glass-card p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between h-full border border-white/10">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <Clock className="text-brand-400" size={18} /> Daily Completion Trend
+          </h3>
+          <p className="text-xs text-slate-400">Task completion activity over time</p>
+        </div>
+        <div className="flex items-center p-1 bg-white/5 border border-white/10 rounded-xl text-xs">
+          {[7, 14, 30].map(range => (
+            <button
+              key={range}
+              onClick={() => setDaysRange(range)}
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                daysRange === range
+                  ? 'bg-brand-500 text-white shadow-[0_0_12px_rgba(37,99,235,0.5)] font-semibold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {range}D
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative w-full overflow-x-auto">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible select-none">
+          <defs>
+            <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#2563eb" stopOpacity="0.45" />
+              <stop offset="100%" stopColor="#2563eb" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
+            const y = padding + ratio * (height - padding * 2);
+            return (
+              <line
+                key={i}
+                x1={padding}
+                y1={y}
+                x2={width - padding}
+                y2={y}
+                stroke="rgba(255, 255, 255, 0.05)"
+                strokeDasharray="4 4"
+              />
+            );
+          })}
+
+          {areaD && <path d={areaD} fill="url(#areaGradient)" />}
+
+          {pathD && (
+            <path
+              d={pathD}
+              fill="none"
+              stroke="#38bdf8"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="drop-shadow-[0_0_8px_rgba(56,189,248,0.5)]"
+            />
+          )}
+
+          {points.map((p, i) => (
+            <g key={i}>
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={hoveredPoint?.dateStr === p.dateStr ? 6 : 4}
+                className={`transition-all duration-150 cursor-pointer ${
+                  hoveredPoint?.dateStr === p.dateStr
+                    ? 'fill-brand-400 stroke-white stroke-2 shadow-[0_0_15px_#38bdf8]'
+                    : 'fill-brand-500 stroke-[#03071b] stroke-2'
+                }`}
+                onMouseEnter={() => setHoveredPoint(p)}
+                onMouseLeave={() => setHoveredPoint(null)}
+              />
+              {(daysRange <= 14 || i % Math.ceil(daysRange / 7) === 0) && (
+                <text
+                  x={p.x}
+                  y={height - 10}
+                  textAnchor="middle"
+                  className="fill-slate-500 text-[9px] font-medium"
+                >
+                  {p.label}
+                </text>
+              )}
+            </g>
+          ))}
+        </svg>
+
+        {hoveredPoint && (
+          <div
+            className="absolute z-20 pointer-events-none bg-[#07102e]/95 border border-brand-500/40 p-2.5 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] backdrop-blur-md text-xs space-y-1 animate-in fade-in duration-150"
+            style={{
+              left: `${(hoveredPoint.x / width) * 100}%`,
+              top: `${(hoveredPoint.y / height) * 100 - 45}%`,
+              transform: 'translate(-50%, -100%)'
+            }}
+          >
+            <div className="font-bold text-white">{hoveredPoint.dateStr}</div>
+            <div className="text-slate-300 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-brand-400" />
+              <span>Completed: <strong className="text-brand-300">{hoveredPoint.count} tasks</strong></span>
+            </div>
+            <div className="text-slate-300 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-cyan-400" />
+              <span>Hours: <strong className="text-cyan-300">{hoveredPoint.hours} hrs</strong></span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DepartmentBarChart({ departments }) {
+  const [hoveredDept, setHoveredDept] = useState(null);
+
+  const deptData = useMemo(() => {
+    return departments.map(dept => {
+      let total = 0;
+      let completed = 0;
+      dept.boards?.forEach(board => {
+        board.employees?.forEach(emp => {
+          emp.tasks?.forEach(t => {
+            total++;
+            if (t.completed) completed++;
+          });
+        });
+      });
+      const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
+      return { id: dept.id, name: dept.name, total, completed, pending: total - completed, pct };
+    });
+  }, [departments]);
+
+  const maxTotal = Math.max(...deptData.map(d => d.total), 5);
+
+  return (
+    <div className="glass-card p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between h-full border border-white/10">
+      <div className="mb-4">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <Building2 className="text-brand-400" size={18} /> Department Comparison
+        </h3>
+        <p className="text-xs text-slate-400">Total vs Completed workload per department</p>
+      </div>
+
+      <div className="space-y-4">
+        {deptData.map(d => (
+          <div
+            key={d.id}
+            className="space-y-1.5 group cursor-pointer"
+            onMouseEnter={() => setHoveredDept(d)}
+            onMouseLeave={() => setHoveredDept(null)}
+          >
+            <div className="flex justify-between text-xs items-center">
+              <span className="text-white font-medium group-hover:text-brand-300 transition-colors">{d.name}</span>
+              <span className="text-slate-400 font-semibold">{d.completed} / {d.total} ({d.pct}%)</span>
+            </div>
+
+            <div className="w-full h-4 bg-white/5 rounded-full overflow-hidden p-0.5 flex items-center border border-white/5 group-hover:border-brand-500/30 transition-all">
+              <div
+                className="h-full bg-gradient-to-r from-brand-600 to-sky-400 rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(37,99,235,0.4)]"
+                style={{ width: `${(d.completed / maxTotal) * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+
+        {deptData.length === 0 && (
+          <p className="text-slate-500 text-xs text-center py-6">No department data available.</p>
+        )}
+      </div>
+
+      {hoveredDept && (
+        <div className="mt-4 p-3 bg-white/5 border border-white/10 rounded-xl text-xs flex items-center justify-between text-slate-300 animate-in fade-in duration-200">
+          <span>Department: <strong className="text-white">{hoveredDept.name}</strong></span>
+          <span className="text-green-400 font-semibold">{hoveredDept.completed} Completed</span>
+          <span className="text-amber-400 font-semibold">{hoveredDept.pending} Pending</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PriorityDistributionChart({ tasks }) {
+  const [hoveredPriority, setHoveredPriority] = useState(null);
+
+  const priorityCounts = useMemo(() => {
+    let high = 0, medium = 0, low = 0;
+    tasks.forEach(t => {
+      if (t.priority === 'High') high++;
+      else if (t.priority === 'Low') low++;
+      else medium++;
+    });
+    const total = high + medium + low || 1;
+    return [
+      { key: 'High', label: 'High Priority', count: high, color: '#ef4444', pct: Math.round((high / total) * 100) },
+      { key: 'Medium', label: 'Medium Priority', count: medium, color: '#eab308', pct: Math.round((medium / total) * 100) },
+      { key: 'Low', label: 'Low Priority', count: low, color: '#3b82f6', pct: Math.round((low / total) * 100) }
+    ];
+  }, [tasks]);
+
+  const totalTasks = tasks.length;
+
+  return (
+    <div className="glass-card p-6 rounded-2xl flex flex-col justify-between h-full border border-white/10">
+      <div className="mb-4">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <Tag className="text-brand-400" size={18} /> Priority Distribution
+        </h3>
+        <p className="text-xs text-slate-400">Breakdown of tasks by urgency level</p>
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-center justify-around gap-6 my-auto">
+        <div className="relative w-36 h-36 flex items-center justify-center flex-shrink-0 select-none">
+          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="38" className="stroke-white/5 fill-none stroke-[10]" />
+            {(() => {
+              let accumulatedPct = 0;
+              const circumference = 2 * Math.PI * 38;
+              return priorityCounts.map(item => {
+                const strokeDasharray = `${(item.pct / 100) * circumference} ${circumference}`;
+                const strokeDashoffset = - (accumulatedPct / 100) * circumference;
+                accumulatedPct += item.pct;
+                const isHovered = hoveredPriority === item.key;
+
+                return (
+                  <circle
+                    key={item.key}
+                    cx="50"
+                    cy="50"
+                    r="38"
+                    stroke={item.color}
+                    strokeWidth={isHovered ? "14" : "10"}
+                    className="fill-none transition-all duration-300 cursor-pointer"
+                    strokeDasharray={strokeDasharray}
+                    strokeDashoffset={strokeDashoffset}
+                    onMouseEnter={() => setHoveredPriority(item.key)}
+                    onMouseLeave={() => setHoveredPriority(null)}
+                  />
+                );
+              });
+            })()}
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+            <span className="text-xl font-bold text-white">{totalTasks}</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Tasks</span>
+          </div>
+        </div>
+
+        <div className="space-y-3 w-full sm:w-auto">
+          {priorityCounts.map(item => (
+            <div
+              key={item.key}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
+                hoveredPriority === item.key
+                  ? 'bg-white/10 border-white/20 scale-105 shadow-[0_0_12px_rgba(255,255,255,0.1)]'
+                  : 'bg-white/5 border-white/5 hover:bg-white/10'
+              }`}
+              onMouseEnter={() => setHoveredPriority(item.key)}
+              onMouseLeave={() => setHoveredPriority(null)}
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                <span className="text-xs font-medium text-slate-200">{item.label}</span>
+              </div>
+              <span className="text-xs font-bold text-white">{item.count} ({item.pct}%)</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- ANALYTICS DASHBOARD COMPONENT ---
 function AnalyticsDashboard({ departments, archivedTasks = [] }) {
   const [showReportModal, setShowReportModal] = useState(false);
@@ -743,35 +1073,18 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Department Workload */}
-        <div className="glass-card p-6">
-          <h3 className="text-xl font-bold text-white mb-6 border-b border-white/10 pb-4">Department Workload</h3>
-          <div className="space-y-6">
-            {deptStats.map((ds, i) => (
-              <div key={i} className="space-y-2">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-white font-medium">{ds.name}</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-slate-400">{ds.total} Tasks</span>
-                    <button
-                      onClick={() => openReportModalForDept(ds.id)}
-                      className="px-2.5 py-1 text-xs bg-brand-500/20 hover:bg-brand-500/40 text-brand-300 border border-brand-500/30 rounded-lg flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(37,99,235,0.2)] hover:shadow-[0_0_15px_rgba(37,99,235,0.4)] cursor-pointer active:scale-95"
-                      title={`Download detailed report for ${ds.name}`}
-                    >
-                      <Download size={12} /> Download Report
-                    </button>
-                  </div>
-                </div>
-                <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden flex">
-                  <div className="h-full bg-sky-500 rounded-l-full transition-all duration-1000" style={{ width: `${ds.total === 0 ? 0 : (ds.completed / ds.total) * 100}%` }}></div>
-                  <div className="h-full bg-slate-600/50 flex-1"></div>
-                </div>
-              </div>
-            ))}
-            {deptStats.length === 0 && <p className="text-slate-500 text-center">No departments available.</p>}
-          </div>
+      {/* Interactive Charts Suite */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <CompletionTrendChart tasks={allFlattenedTasks} />
         </div>
+        <div>
+          <PriorityDistributionChart tasks={allFlattenedTasks} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <DepartmentBarChart departments={departments} />
 
         {/* Agent Leaderboard with Daily/Overall Toggle */}
         <div className="glass-card p-6">
