@@ -23,7 +23,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
-  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, Image, UploadCloud, Link, Clock
+  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, Image, UploadCloud, Link, Clock, Download, FileSpreadsheet
 } from 'lucide-react';
 
 
@@ -421,9 +421,65 @@ const getBoardTaskStats = (board) => {
   return { total, completed, pct };
 };
 
+// CSV Report Exporter Helper
+function downloadCSVReport(tasks, reportTitle) {
+  if (!tasks || tasks.length === 0) {
+    alert("No tasks found matching your filter criteria.");
+    return;
+  }
+
+  const headers = [
+    "Task Title",
+    "Department",
+    "Board",
+    "Agent Name",
+    "Status",
+    "Priority",
+    "Required Time",
+    "Created Date",
+    "Completed Date"
+  ];
+
+  const escapeCSV = (val) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const rows = tasks.map(t => [
+    escapeCSV(t.title),
+    escapeCSV(t.deptName),
+    escapeCSV(t.boardName),
+    escapeCSV(t.agentName),
+    escapeCSV(t.completed ? "Completed" : "Pending"),
+    escapeCSV(t.priority),
+    escapeCSV(t.requiredTime || "N/A"),
+    escapeCSV(t.createdAt ? formatDateLong(t.createdAt) : "N/A"),
+    escapeCSV(t.completedDate ? formatDateLong(t.completedDate) : "N/A")
+  ]);
+
+  const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  const filename = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 // --- ANALYTICS DASHBOARD COMPONENT ---
-function AnalyticsDashboard({ departments }) {
-  // Compute Stats
+function AnalyticsDashboard({ departments, archivedTasks = [] }) {
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportDeptId, setReportDeptId] = useState('ALL');
+  const [reportAgentId, setReportAgentId] = useState('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [quickPreset, setQuickPreset] = useState('ALL_TIME');
+
+  // Compute Stats across active departments
   let totalTasks = 0;
   let completedTasks = 0;
   const deptStats = [];
@@ -447,25 +503,189 @@ function AnalyticsDashboard({ departments }) {
           }
         });
         if (empTotal > 0) {
-          agentStats.push({ name: emp.name, completed: empCompleted, total: empTotal, deptName: dept.name });
+          agentStats.push({ id: emp.id, name: emp.name, completed: empCompleted, total: empTotal, deptId: dept.id, deptName: dept.name });
         }
       });
     });
-    deptStats.push({ name: dept.name, total: deptTotal, completed: deptCompleted });
+    deptStats.push({ id: dept.id, name: dept.name, total: deptTotal, completed: deptCompleted });
   });
 
   const overallPct = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
-  
+
   // Sort agents by completed tasks (Leaderboard)
   agentStats.sort((a, b) => b.completed - a.completed);
   const topAgents = agentStats.slice(0, 10);
 
+  // Flatten all tasks (active + archived) for custom filtering & reports
+  const allFlattenedTasks = useMemo(() => {
+    const list = [];
+    const agentMap = {};
+
+    departments.forEach(dept => {
+      dept.boards?.forEach(board => {
+        board.employees?.forEach(emp => {
+          agentMap[emp.id] = {
+            agentId: emp.id,
+            agentName: emp.name,
+            boardId: board.id,
+            boardName: board.name,
+            deptId: dept.id,
+            deptName: dept.name
+          };
+
+          emp.tasks?.forEach(task => {
+            list.push({
+              id: task.id,
+              title: task.title || 'Untitled Task',
+              completed: !!task.completed,
+              priority: task.priority || 'Medium',
+              requiredTime: task.requiredTime || task.required_time || task.tag || '',
+              createdAt: task.created_at || task.createdAt || '',
+              completedDate: task.completed_date || task.completedDate || '',
+              agentId: emp.id,
+              agentName: emp.name,
+              boardId: board.id,
+              boardName: board.name,
+              deptId: dept.id,
+              deptName: dept.name,
+              isArchived: false
+            });
+          });
+        });
+      });
+    });
+
+    archivedTasks.forEach(task => {
+      const meta = agentMap[task.agent_id] || {
+        agentId: task.agent_id || 'Unknown',
+        agentName: 'Unassigned/Legacy Agent',
+        boardId: task.board_id || '',
+        boardName: 'N/A',
+        deptId: task.department_id || '',
+        deptName: 'Archived Tasks'
+      };
+      list.push({
+        id: task.id,
+        title: task.title || 'Untitled Task',
+        completed: true,
+        priority: task.priority || 'Medium',
+        requiredTime: task.requiredTime || task.required_time || task.tag || '',
+        createdAt: task.created_at || task.createdAt || '',
+        completedDate: task.completed_date || task.completedDate || '',
+        agentId: meta.agentId,
+        agentName: meta.agentName,
+        boardId: meta.boardId,
+        boardName: meta.boardName,
+        deptId: meta.deptId,
+        deptName: meta.deptName,
+        isArchived: true
+      });
+    });
+
+    return list;
+  }, [departments, archivedTasks]);
+
+  // List of agents for selector dropdowns (filtered by chosen department)
+  const availableAgents = useMemo(() => {
+    const map = new Map();
+    departments.forEach(dept => {
+      if (reportDeptId === 'ALL' || dept.id === reportDeptId) {
+        dept.boards?.forEach(board => {
+          board.employees?.forEach(emp => {
+            if (!map.has(emp.id)) {
+              map.set(emp.id, { id: emp.id, name: emp.name, deptName: dept.name });
+            }
+          });
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [departments, reportDeptId]);
+
+  // Quick Date Presets Handler
+  const applyPreset = (presetKey) => {
+    setQuickPreset(presetKey);
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    if (presetKey === 'TODAY') {
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (presetKey === 'LAST_7') {
+      const d7 = new Date(today);
+      d7.setDate(d7.getDate() - 7);
+      setStartDate(d7.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else if (presetKey === 'LAST_30') {
+      const d30 = new Date(today);
+      d30.setDate(d30.getDate() - 30);
+      setStartDate(d30.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else if (presetKey === 'THIS_MONTH') {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setStartDate(firstDay.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else if (presetKey === 'ALL_TIME') {
+      setStartDate('');
+      setEndDate('');
+    }
+  };
+
+  // Filtered tasks for the report
+  const filteredReportTasks = useMemo(() => {
+    return allFlattenedTasks.filter(t => {
+      // Department filter
+      if (reportDeptId !== 'ALL' && t.deptId !== reportDeptId) return false;
+      // Agent filter
+      if (reportAgentId !== 'ALL' && t.agentId !== reportAgentId) return false;
+      // Date range filter
+      let taskDateStr = t.completedDate || (t.createdAt ? t.createdAt.split('T')[0] : '');
+      if (startDate && taskDateStr && taskDateStr < startDate) return false;
+      if (endDate && taskDateStr && taskDateStr > endDate) return false;
+
+      return true;
+    });
+  }, [allFlattenedTasks, reportDeptId, reportAgentId, startDate, endDate]);
+
+  const reportCompletedCount = filteredReportTasks.filter(t => t.completed).length;
+  const reportTotalHours = Math.round(filteredReportTasks.reduce((sum, t) => sum + parseTimeToHours(t.requiredTime), 0) * 10) / 10;
+  const reportCompletionPct = filteredReportTasks.length === 0 ? 0 : Math.round((reportCompletedCount / filteredReportTasks.length) * 100);
+
+  const openReportModalForDept = (deptId = 'ALL') => {
+    setReportDeptId(deptId);
+    setReportAgentId('ALL');
+    applyPreset('ALL_TIME');
+    setShowReportModal(true);
+  };
+
+  const handleExportCSV = () => {
+    let deptNameStr = 'All_Departments';
+    if (reportDeptId !== 'ALL') {
+      const targetDept = departments.find(d => d.id === reportDeptId);
+      if (targetDept) deptNameStr = targetDept.name;
+    }
+    if (reportAgentId !== 'ALL') {
+      const targetAgent = availableAgents.find(a => a.id === reportAgentId);
+      if (targetAgent) deptNameStr += `_${targetAgent.name}`;
+    }
+    downloadCSVReport(filteredReportTasks, `${deptNameStr}_Analytics_Report`);
+  };
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full max-w-7xl mx-auto space-y-6">
+      {/* System Overview Header */}
       <div className="glass-card p-8 flex flex-col md:flex-row items-center justify-between gap-8 border-t border-brand-500/30">
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-2"><BarChart3 className="text-brand-400"/> System Overview</h2>
+          <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
+            <BarChart3 className="text-brand-400"/> System Overview
+          </h2>
           <p className="text-slate-400">Total metrics across all departments and boards.</p>
+          <button
+            onClick={() => openReportModalForDept('ALL')}
+            className="mt-4 px-4 py-2 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(124,58,237,0.4)] hover:shadow-[0_0_25px_rgba(124,58,237,0.6)] transition-all active:scale-95 cursor-pointer"
+          >
+            <Download size={14} /> Generate Custom Report
+          </button>
         </div>
         <div className="flex flex-col items-center">
           <div className="relative w-32 h-32 flex items-center justify-center">
@@ -490,9 +710,18 @@ function AnalyticsDashboard({ departments }) {
           <div className="space-y-6">
             {deptStats.map((ds, i) => (
               <div key={i} className="space-y-2">
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between items-center text-sm">
                   <span className="text-white font-medium">{ds.name}</span>
-                  <span className="text-slate-400">{ds.total} Tasks</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-400">{ds.total} Tasks</span>
+                    <button
+                      onClick={() => openReportModalForDept(ds.id)}
+                      className="px-2.5 py-1 text-xs bg-brand-500/20 hover:bg-brand-500/40 text-brand-300 border border-brand-500/30 rounded-lg flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(124,58,237,0.2)] hover:shadow-[0_0_15px_rgba(124,58,237,0.4)] cursor-pointer active:scale-95"
+                      title={`Download detailed report for ${ds.name}`}
+                    >
+                      <Download size={12} /> Download Report
+                    </button>
+                  </div>
                 </div>
                 <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden flex">
                   <div className="h-full bg-cyan-500 rounded-l-full transition-all duration-1000" style={{ width: `${ds.total === 0 ? 0 : (ds.completed / ds.total) * 100}%` }}></div>
@@ -529,6 +758,227 @@ function AnalyticsDashboard({ departments }) {
           </div>
         </div>
       </div>
+
+      {/* Glassmorphism Report Generation & Filter Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="glass-card border border-brand-500/30 w-full max-w-4xl p-6 rounded-2xl shadow-[0_0_50px_rgba(124,58,237,0.3)] bg-[#0f0724]/95 text-slate-200 space-y-6 relative max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-brand-500/20 text-brand-400 rounded-xl border border-brand-500/30">
+                  <FileSpreadsheet size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Department Report & Analytics Export</h3>
+                  <p className="text-xs text-slate-400">Filter task data by Department, Agent, and Date Range, then download as CSV.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-6 pr-1 custom-scrollbar">
+              {/* Glassmorphism Filtering Controls */}
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-4">
+                <div className="flex items-center gap-2 text-xs font-semibold text-brand-300 uppercase tracking-wider">
+                  <Filter size={14} /> Filter Options
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Department Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Department</label>
+                    <select
+                      value={reportDeptId}
+                      onChange={(e) => {
+                        setReportDeptId(e.target.value);
+                        setReportAgentId('ALL');
+                      }}
+                      className="w-full bg-[#170c36] border border-white/15 text-white text-xs rounded-xl p-2.5 focus:border-brand-500 focus:outline-none transition-all cursor-pointer"
+                    >
+                      <option value="ALL">All Departments</option>
+                      {departments.map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Agent Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Agent</label>
+                    <select
+                      value={reportAgentId}
+                      onChange={(e) => setReportAgentId(e.target.value)}
+                      className="w-full bg-[#170c36] border border-white/15 text-white text-xs rounded-xl p-2.5 focus:border-brand-500 focus:outline-none transition-all cursor-pointer"
+                    >
+                      <option value="ALL">All Agents ({availableAgents.length})</option>
+                      {availableAgents.map(ag => (
+                        <option key={ag.id} value={ag.id}>{ag.name} ({ag.deptName})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* From Date */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">From Date</label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        setQuickPreset('CUSTOM');
+                      }}
+                      className="w-full bg-[#170c36] border border-white/15 text-white text-xs rounded-xl p-2 focus:border-brand-500 focus:outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* To Date */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">To Date</label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => {
+                        setEndDate(e.target.value);
+                        setQuickPreset('CUSTOM');
+                      }}
+                      className="w-full bg-[#170c36] border border-white/15 text-white text-xs rounded-xl p-2 focus:border-brand-500 focus:outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Date Presets Bar */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5">
+                  <span className="text-[11px] text-slate-400 mr-1 font-medium">Quick Presets:</span>
+                  {[
+                    { key: 'ALL_TIME', label: 'All Time' },
+                    { key: 'TODAY', label: 'Today' },
+                    { key: 'LAST_7', label: 'Last 7 Days' },
+                    { key: 'LAST_30', label: 'Last 30 Days' },
+                    { key: 'THIS_MONTH', label: 'This Month' },
+                  ].map(preset => (
+                    <button
+                      key={preset.key}
+                      onClick={() => applyPreset(preset.key)}
+                      className={`text-xs px-3 py-1 rounded-lg border transition-all cursor-pointer ${
+                        quickPreset === preset.key
+                          ? 'bg-brand-500/30 text-brand-300 border-brand-500/50 shadow-[0_0_10px_rgba(124,58,237,0.3)] font-semibold'
+                          : 'bg-white/5 hover:bg-white/10 text-slate-400 border-white/10'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filter Summary Metrics */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="bg-white/5 border border-white/10 p-3.5 rounded-xl text-center">
+                  <div className="text-slate-400 text-xs font-medium">Matching Tasks</div>
+                  <div className="text-xl font-bold text-white mt-1">{filteredReportTasks.length}</div>
+                </div>
+                <div className="bg-white/5 border border-white/10 p-3.5 rounded-xl text-center">
+                  <div className="text-slate-400 text-xs font-medium">Completed</div>
+                  <div className="text-xl font-bold text-green-400 mt-1">{reportCompletedCount}</div>
+                </div>
+                <div className="bg-white/5 border border-white/10 p-3.5 rounded-xl text-center">
+                  <div className="text-slate-400 text-xs font-medium">Hours Tracked</div>
+                  <div className="text-xl font-bold text-cyan-400 mt-1">{reportTotalHours} hrs</div>
+                </div>
+                <div className="bg-white/5 border border-white/10 p-3.5 rounded-xl text-center">
+                  <div className="text-slate-400 text-xs font-medium">Completion Rate</div>
+                  <div className="text-xl font-bold text-brand-400 mt-1">{reportCompletionPct}%</div>
+                </div>
+              </div>
+
+              {/* Report Data Table Preview */}
+              <div className="bg-[#120a21] border border-white/10 rounded-xl overflow-hidden shadow-inner">
+                <div className="p-3 bg-white/5 border-b border-white/10 flex justify-between items-center">
+                  <span className="text-xs font-semibold text-slate-300">Report Preview ({filteredReportTasks.length} records)</span>
+                </div>
+                <div className="max-h-56 overflow-y-auto custom-scrollbar">
+                  {filteredReportTasks.length === 0 ? (
+                    <div className="p-8 text-center text-slate-500 text-xs">
+                      No tasks match the selected Department, Agent, or Date Range filters.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-white/5 text-slate-400 sticky top-0 backdrop-blur-md">
+                        <tr>
+                          <th className="p-3">Task Title</th>
+                          <th className="p-3">Department</th>
+                          <th className="p-3">Agent</th>
+                          <th className="p-3">Status</th>
+                          <th className="p-3">Priority</th>
+                          <th className="p-3">Completed Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 text-slate-300">
+                        {filteredReportTasks.slice(0, 50).map(t => (
+                          <tr key={t.id} className="hover:bg-white/5 transition-colors">
+                            <td className="p-3 font-medium text-white max-w-[200px] truncate">{t.title}</td>
+                            <td className="p-3">{t.deptName}</td>
+                            <td className="p-3">{t.agentName}</td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                t.completed ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              }`}>
+                                {t.completed ? 'Completed' : 'Pending'}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] border ${
+                                t.priority === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
+                                t.priority === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
+                                'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                              }`}>
+                                {t.priority}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-400">{t.completedDate ? formatDateLong(t.completedDate) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Action */}
+            <div className="flex items-center justify-between pt-4 border-t border-white/10">
+              <span className="text-xs text-slate-500">
+                {filteredReportTasks.length > 50 ? `Showing top 50 of ${filteredReportTasks.length} tasks in preview. CSV will contain all records.` : ''}
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  disabled={filteredReportTasks.length === 0}
+                  className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all cursor-pointer ${
+                    filteredReportTasks.length > 0
+                      ? 'bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white shadow-[0_0_20px_rgba(124,58,237,0.5)] active:scale-95'
+                      : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
+                  }`}
+                >
+                  <Download size={14} /> Download CSV Report
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2193,7 +2643,7 @@ export default function App() {
       <main className="max-w-[1600px] mx-auto px-6 py-6">
         
         {showAnalytics && isAdmin ? (
-          <AnalyticsDashboard departments={departments} />
+          <AnalyticsDashboard departments={departments} archivedTasks={archivedTasks} />
         ) : (
           <>
             {/* LEVEL 1: DEPARTMENTS LIST */}
