@@ -3189,16 +3189,18 @@ export default function App() {
                     <thead className="bg-white/5 border-b border-white/10 text-slate-400">
                       <tr>
                         <th className="px-6 py-4 font-medium">Task Name</th>
-                        <th className="px-6 py-4 font-medium">Agent ID</th>
+                        <th className="px-6 py-4 font-medium">Agent Name</th>
                         <th className="px-6 py-4 font-medium">Priority</th>
                         <th className="px-6 py-4 font-medium">Completed Date</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-slate-300">
-                      {archivedTasks.map(task => (
+                      {archivedTasks.map(task => {
+                        const agentName = departments.flatMap(d => d.boards?.flatMap(b => b.employees || []) || []).find(a => a.id === task.agent_id)?.name || task.agent_id;
+                        return (
                         <tr key={task.id} className="hover:bg-white/5 transition-colors">
                           <td className="px-6 py-4 font-medium text-white">{task.title}</td>
-                          <td className="px-6 py-4">{task.agent_id}</td>
+                          <td className="px-6 py-4">{agentName}</td>
                           <td className="px-6 py-4">
                             <span className={`px-2 py-1 rounded text-xs border ${
                                 task.priority === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
@@ -3210,7 +3212,8 @@ export default function App() {
                           </td>
                           <td className="px-6 py-4 text-slate-400">{task.completed_date || task.completedDate}</td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
