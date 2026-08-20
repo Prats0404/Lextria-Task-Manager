@@ -4212,6 +4212,9 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <History className="text-brand-400 animate-pulse" size={20} />
                   <h2 className="text-lg font-bold text-white">Completed Task History</h2>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30 font-semibold ml-1">
+                    {filteredCompletedTasks.length}
+                  </span>
                 </div>
                 <button onClick={() => setShowHistorySidebar(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer">
                   <X size={18} />
@@ -4226,9 +4229,18 @@ export default function App() {
                     type="text"
                     value={searchHistoryQuery}
                     onChange={(e) => setSearchHistoryQuery(e.target.value)}
-                    placeholder="Search completed tasks..."
-                    className="glass-input w-full pl-9 pr-4 py-2 text-sm"
+                    placeholder="Search completed tasks or agents..."
+                    className="glass-input w-full pl-9 pr-8 py-2 text-sm"
+                    spellCheck={false}
                   />
+                  {searchHistoryQuery && (
+                    <button
+                      onClick={() => setSearchHistoryQuery('')}
+                      className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -4236,17 +4248,24 @@ export default function App() {
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {filteredCompletedTasks.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-500 py-12 text-center">
-                    <History size={40} className="text-slate-600 mb-2" />
-                    <p className="text-sm">No completed tasks found</p>
+                    <History size={40} className="text-slate-600 mb-2 opacity-60" />
+                    <p className="text-sm font-medium">No completed tasks found</p>
                   </div>
                 ) : (
-                  filteredCompletedTasks.map(({ task, emp }) => {
+                  filteredCompletedTasks.map(({ task, emp, boardName, deptName }) => {
                     const cDate = task.completed_date || task.completedDate || task.created_at;
                     return (
-                      <div key={task.id} className="glass-card p-4 border border-white/10 rounded-xl bg-white/5 flex flex-col gap-2.5 hover:bg-white/10 transition-all group">
+                      <div key={task.id} className="glass-card p-4 border border-white/10 rounded-xl bg-white/5 flex flex-col gap-3 hover:bg-white/10 transition-all group">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-semibold text-white line-through decoration-slate-500 truncate">{task.title}</h4>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-sm font-semibold text-white leading-snug break-words">{task.title}</h4>
+                            </div>
+                            {deptName && boardName && deptName !== 'Archived' && (
+                              <span className="text-[10px] text-slate-400 block mt-1 font-medium">
+                                {deptName} • {boardName}
+                              </span>
+                            )}
                             {task.description && (
                               <p className="text-xs text-slate-400 mt-1 line-clamp-2">{task.description}</p>
                             )}
@@ -4255,22 +4274,22 @@ export default function App() {
                             onClick={() => {
                               updateTask(emp.id, task.id, { completed: false });
                             }}
-                            className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-brand-500/20 hover:bg-brand-500/40 text-brand-300 border border-brand-500/30 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(37,99,235,0.2)]"
+                            className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-brand-500/20 hover:bg-brand-500 text-brand-300 hover:text-white border border-brand-500/30 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(37,99,235,0.2)]"
                             title="Undo completion and restore task to Kanban board"
                           >
                             <RotateCcw size={13} /> Undo
                           </button>
                         </div>
 
-                        <div className="flex items-center justify-between border-t border-white/5 pt-2 text-[11px]">
+                        <div className="flex items-center justify-between border-t border-white/5 pt-2.5 text-[11px]">
                           <div className="flex items-center gap-2">
-                            <div className={`w-5 h-5 rounded-full ${emp.color || 'bg-slate-500'} flex items-center justify-center text-[9px] font-bold shadow`}>
+                            <div className={`w-6 h-6 rounded-full ${emp.color || 'bg-slate-500'} flex items-center justify-center text-[10px] font-bold shadow flex-shrink-0`}>
                               {getInitials(emp.name)}
                             </div>
-                            <span className="text-slate-300 font-medium truncate max-w-[110px]">{emp.name}</span>
+                            <span className="text-slate-200 font-medium truncate max-w-[110px]">{emp.name}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-slate-300 text-[10px] flex items-center gap-1 font-medium bg-white/5 px-2 py-0.5 rounded border border-white/10" title="Completion Date">
+                            <span className="text-slate-300 text-[10px] flex items-center gap-1 font-medium bg-white/5 px-2 py-0.5 rounded-md border border-white/10" title="Completion Date">
                               📅 {formatDateLong(cDate)}
                             </span>
                             <span className={`text-[9px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-semibold ${
