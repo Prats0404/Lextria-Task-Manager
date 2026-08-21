@@ -2670,15 +2670,10 @@ export default function App() {
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.completed !== undefined) {
       dbUpdates.completed = updates.completed;
-      const nowIso = new Date().toISOString();
       if (updates.completed) {
-        dbUpdates.completed_date = nowIso.split('T')[0];
-        dbUpdates.completed_at = nowIso;
-        dbUpdates.updated_at = nowIso;
+        dbUpdates.completed_date = new Date().toISOString().split('T')[0];
       } else {
         dbUpdates.completed_date = null;
-        dbUpdates.completed_at = null;
-        dbUpdates.updated_at = nowIso;
         dbUpdates.is_archived = false;
       }
     }
@@ -2700,7 +2695,8 @@ export default function App() {
       }
     }
     
-    await supabase.from('tasks').update(dbUpdates).eq('id', taskId);
+    const { error } = await supabase.from('tasks').update(dbUpdates).eq('id', taskId);
+    if (error) console.error('Failed to update task in Supabase:', error);
   };
 
   const deleteTask = async (empId, taskId) => {
