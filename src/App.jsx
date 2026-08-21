@@ -1783,6 +1783,10 @@ export default function App() {
   const [localDept, setLocalDept] = useState(null);
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
   const [searchHistoryQuery, setSearchHistoryQuery] = useState('');
+  const [historyDeptFilter, setHistoryDeptFilter] = useState('ALL');
+  const [historyAgentFilter, setHistoryAgentFilter] = useState('ALL');
+  const [historyDateFilter, setHistoryDateFilter] = useState('ALL');
+  const [historyPriorityFilter, setHistoryPriorityFilter] = useState('ALL');
   const [showArchivePage, setShowArchivePage] = useState(false);
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [showTagPopover, setShowTagPopover] = useState(false);
@@ -2557,9 +2561,13 @@ export default function App() {
   const updateTask = async (empId, taskId, updates) => {
     let localUpdates = { ...updates };
     if (updates.completed !== undefined) {
-      const cDate = updates.completed ? new Date().toISOString().split('T')[0] : null;
+      const nowIso = new Date().toISOString();
+      const cDate = updates.completed ? nowIso.split('T')[0] : null;
       localUpdates.completed_date = cDate;
       localUpdates.completedDate = cDate;
+      localUpdates.completed_at = updates.completed ? nowIso : null;
+      localUpdates.completedAt = updates.completed ? nowIso : null;
+      localUpdates.updated_at = nowIso;
       if (!updates.completed) {
         localUpdates.is_archived = false;
       }
@@ -2585,6 +2593,8 @@ export default function App() {
                       completed: false,
                       completed_date: null,
                       completedDate: null,
+                      completed_at: null,
+                      completedAt: null,
                       is_archived: false
                     };
                     return { ...e, tasks: [...(e.tasks || []), restoredTask] };
@@ -2660,10 +2670,15 @@ export default function App() {
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.completed !== undefined) {
       dbUpdates.completed = updates.completed;
+      const nowIso = new Date().toISOString();
       if (updates.completed) {
-        dbUpdates.completed_date = new Date().toISOString().split('T')[0];
+        dbUpdates.completed_date = nowIso.split('T')[0];
+        dbUpdates.completed_at = nowIso;
+        dbUpdates.updated_at = nowIso;
       } else {
         dbUpdates.completed_date = null;
+        dbUpdates.completed_at = null;
+        dbUpdates.updated_at = nowIso;
         dbUpdates.is_archived = false;
       }
     }
@@ -2914,7 +2929,9 @@ export default function App() {
           title: task.title || 'Untitled Task',
           description: task.description || '',
           completed: true,
+          priority: task.priority || 'Medium',
           completed_date: task.completed_date || task.completedDate,
+          completed_at: task.completed_at || task.completedAt || task.updated_at,
           created_at: task.created_at || task.createdAt
         },
         emp,
@@ -2923,18 +2940,57 @@ export default function App() {
       });
     });
 
-    return list.sort((a, b) => new Date(b.task.completed_date || b.task.created_at || 0) - new Date(a.task.completed_date || a.task.created_at || 0));
+    return list.sort((a, b) => {
+      const getTimestamp = (t) => {
+        if (t.completed_at) return new Date(t.completed_at).getTime();
+        if (t.completedAt) return new Date(t.completedAt).getTime();
+        if (t.updated_at) return new Date(t.updated_at).getTime();
+        if (t.completed_date) return new Date(t.completed_date).getTime();
+        if (t.completedDate) return new Date(t.completedDate).getTime();
+        if (t.created_at) return new Date(t.created_at).getTime();
+        return 0;
+      };
+      return getTimestamp(b.task) - getTimestamp(a.task);
+    });
   }, [departments, archivedTasks]);
 
   const filteredCompletedTasks = useMemo(() => {
-    if (!searchHistoryQuery.trim()) return completedTasks;
-    const query = searchHistoryQuery.toLowerCase();
-    return completedTasks.filter(({ task, emp }) => 
-      task.title.toLowerCase().includes(query) || 
-      (task.description && task.description.toLowerCase().includes(query)) ||
-      emp.name.toLowerCase().includes(query)
-    );
-  }, [completedTasks, searchHistoryQuery]);
+    const todayStrVal = new Date().toISOString().split('T')[0];
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStrVal = yesterdayDate.toISOString().split('T')[0];
+    const d7Date = new Date();
+    d7Date.setDate(d7Date.getDate() - 7);
+    const d7StrVal = d7Date.toISOString().split('T')[0];
+
+    return completedTasks.filter(({ task, emp, deptName }) => {
+      // Search query filter
+      if (searchHistoryQuery.trim()) {
+        const query = searchHistoryQuery.toLowerCase();
+        const matchesTitle = task.title.toLowerCase().includes(query);
+        const matchesDesc = task.description && task.description.toLowerCase().includes(query);
+        const matchesAgent = emp.name.toLowerCase().includes(query);
+        if (!matchesTitle && !matchesDesc && !matchesAgent) return false;
+      }
+
+      // Department filter
+      if (historyDeptFilter !== 'ALL' && deptName !== historyDeptFilter) return false;
+
+      // Agent filter
+      if (historyAgentFilter !== 'ALL' && emp.id !== historyAgentFilter) return false;
+
+      // Priority filter
+      if (historyPriorityFilter !== 'ALL' && (task.priority || 'Medium') !== historyPriorityFilter) return false;
+
+      // Date filter
+      const taskDate = task.completed_date || task.completedDate || (task.created_at ? task.created_at.split('T')[0] : '');
+      if (historyDateFilter === 'TODAY' && taskDate !== todayStrVal) return false;
+      if (historyDateFilter === 'YESTERDAY' && taskDate !== yesterdayStrVal) return false;
+      if (historyDateFilter === 'LAST_7' && taskDate < d7StrVal) return false;
+
+      return true;
+    });
+  }, [completedTasks, searchHistoryQuery, historyDeptFilter, historyAgentFilter, historyDateFilter, historyPriorityFilter]);
 
   // Synchronize local modal editor state when the selected task changes
   useEffect(() => {
@@ -4240,8 +4296,8 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Search Box */}
-              <div className="p-4 border-b border-white/10 bg-white/5">
+              {/* Search Box & Filter Controls */}
+              <div className="p-4 border-b border-white/10 bg-white/5 space-y-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-3 text-slate-400" size={16} />
                   <input
@@ -4260,6 +4316,78 @@ export default function App() {
                       <X size={14} />
                     </button>
                   )}
+                </div>
+
+                {/* Filter Options Controls Bar */}
+                <div className="space-y-2 pt-1 border-t border-white/5">
+                  <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
+                    <span className="flex items-center gap-1.5 text-slate-300">
+                      <SlidersHorizontal size={13} className="text-brand-400" /> Filter History
+                    </span>
+                    {(historyDeptFilter !== 'ALL' || historyAgentFilter !== 'ALL' || historyDateFilter !== 'ALL' || historyPriorityFilter !== 'ALL') && (
+                      <button
+                        onClick={() => {
+                          setHistoryDeptFilter('ALL');
+                          setHistoryAgentFilter('ALL');
+                          setHistoryDateFilter('ALL');
+                          setHistoryPriorityFilter('ALL');
+                        }}
+                        className="text-brand-400 hover:text-brand-300 text-[11px] font-semibold transition-colors cursor-pointer"
+                      >
+                        Reset Filters
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Department Filter */}
+                    <select
+                      value={historyDeptFilter}
+                      onChange={(e) => setHistoryDeptFilter(e.target.value)}
+                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0c173c] text-white cursor-pointer rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                    >
+                      <option value="ALL">All Departments</option>
+                      {departments.map(d => (
+                        <option key={d.id} value={d.name}>{d.name}</option>
+                      ))}
+                    </select>
+
+                    {/* Agent Filter */}
+                    <select
+                      value={historyAgentFilter}
+                      onChange={(e) => setHistoryAgentFilter(e.target.value)}
+                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0c173c] text-white cursor-pointer rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                    >
+                      <option value="ALL">All Agents ({allEmployees.length})</option>
+                      {allEmployees.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      ))}
+                    </select>
+
+                    {/* Date Filter */}
+                    <select
+                      value={historyDateFilter}
+                      onChange={(e) => setHistoryDateFilter(e.target.value)}
+                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0c173c] text-white cursor-pointer rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                    >
+                      <option value="ALL">All Dates</option>
+                      <option value="TODAY">Today</option>
+                      <option value="YESTERDAY">Yesterday</option>
+                      <option value="LAST_7">Last 7 Days</option>
+                    </select>
+
+                    {/* Priority Filter */}
+                    <select
+                      value={historyPriorityFilter}
+                      onChange={(e) => setHistoryPriorityFilter(e.target.value)}
+                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0c173c] text-white cursor-pointer rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                    >
+                      <option value="ALL">All Priorities</option>
+                      <option value="High">High Priority</option>
+                      <option value="Medium">Medium Priority</option>
+                      <option value="Low">Low Priority</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
