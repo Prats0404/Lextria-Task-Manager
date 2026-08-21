@@ -90,6 +90,25 @@ function parseTimeToHours(timeStr) {
 
   return 0;
 }
+
+function formatHoursToHuman(hoursDecimal) {
+  if (!hoursDecimal || hoursDecimal <= 0) return '0 min';
+  
+  const totalMinutes = Math.round(hoursDecimal * 60);
+  if (totalMinutes === 0) return '0 min';
+
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+
+  if (hrs === 0) {
+    return `${mins} min`;
+  }
+  if (mins === 0) {
+    return `${hrs} ${hrs === 1 ? 'hr' : 'hrs'}`;
+  }
+  return `${hrs} ${hrs === 1 ? 'hr' : 'hrs'}, ${mins} min`;
+}
+
 function renderDescriptionWithLinks(text) {
   if (!text) return null;
   const linkRegex = /((?:https?:\/\/|www\.)[^\s]+|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
@@ -298,7 +317,7 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
               </span>
               <span className={`font-semibold flex items-center gap-1 ${isOvertime ? 'text-amber-300 font-bold' : 'text-cyan-300'}`}>
                 {isOvertime && <span title="Overtime Productivity">⚡</span>}
-                {completedHours} / 8 hrs ({hoursPct}%)
+                {formatHoursToHuman(completedHoursRaw)} / 8 hrs ({hoursPct}%)
               </span>
             </div>
             <div className="w-full bg-slate-800/50 rounded-full h-1.5 overflow-hidden">
@@ -638,7 +657,7 @@ function CompletionTrendChart({ tasks }) {
             </div>
             <div className="text-slate-300 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-cyan-400" />
-              <span>Hours: <strong className="text-cyan-300">{hoveredPoint.hours} hrs</strong></span>
+              <span>Hours: <strong className="text-cyan-300">{formatHoursToHuman(hoveredPoint.hours)}</strong></span>
             </div>
           </div>
         )}
@@ -736,7 +755,7 @@ function DepartmentBarChart({ departments, allFlattenedTasks = [] }) {
             <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-white/5">
               <span>Completed: <strong className="text-green-400">{d.completed}</strong></span>
               <span>Pending: <strong className="text-amber-400">{d.pending}</strong></span>
-              <span>Hours Tracked: <strong className="text-cyan-300">{d.hours} hrs</strong></span>
+              <span>Hours Tracked: <strong className="text-cyan-300">{formatHoursToHuman(d.hours)}</strong></span>
             </div>
           </div>
         ))}
@@ -1318,7 +1337,7 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
                 </div>
                 <div className="bg-white/5 border border-white/10 p-3.5 rounded-xl text-center">
                   <div className="text-slate-400 text-xs font-medium">Hours Tracked</div>
-                  <div className="text-xl font-bold text-sky-400 mt-1">{reportTotalHours} hrs</div>
+                  <div className="text-xl font-bold text-sky-400 mt-1">{formatHoursToHuman(reportTotalHours)}</div>
                 </div>
                 <div className="bg-white/5 border border-white/10 p-3.5 rounded-xl text-center">
                   <div className="text-slate-400 text-xs font-medium">Completion Rate</div>
