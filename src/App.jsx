@@ -23,7 +23,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
-  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, Image, UploadCloud, Link, Clock, Download, FileSpreadsheet
+  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, SlidersHorizontal, Image, UploadCloud, Link, Clock, Download, FileSpreadsheet
 } from 'lucide-react';
 
 
