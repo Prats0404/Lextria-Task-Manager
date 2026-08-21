@@ -4344,11 +4344,11 @@ export default function App() {
                     <select
                       value={historyDeptFilter}
                       onChange={(e) => setHistoryDeptFilter(e.target.value)}
-                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0c173c] text-white cursor-pointer rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0a1438] text-white cursor-pointer rounded-lg border border-white/15 focus:outline-none focus:ring-1 focus:ring-brand-400 font-medium"
                     >
-                      <option value="ALL">All Departments</option>
+                      <option value="ALL" className="bg-[#0a1438] text-white py-1">All Departments</option>
                       {departments.map(d => (
-                        <option key={d.id} value={d.name}>{d.name}</option>
+                        <option key={d.id} value={d.name} className="bg-[#0a1438] text-white py-1">{d.name}</option>
                       ))}
                     </select>
 
@@ -4356,11 +4356,11 @@ export default function App() {
                     <select
                       value={historyAgentFilter}
                       onChange={(e) => setHistoryAgentFilter(e.target.value)}
-                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0c173c] text-white cursor-pointer rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0a1438] text-white cursor-pointer rounded-lg border border-white/15 focus:outline-none focus:ring-1 focus:ring-brand-400 font-medium"
                     >
-                      <option value="ALL">All Agents ({allEmployees.length})</option>
+                      <option value="ALL" className="bg-[#0a1438] text-white py-1">All Agents ({allEmployees.length})</option>
                       {allEmployees.map(emp => (
-                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                        <option key={emp.id} value={emp.id} className="bg-[#0a1438] text-white py-1">{emp.name}</option>
                       ))}
                     </select>
 
@@ -4368,31 +4368,31 @@ export default function App() {
                     <select
                       value={historyDateFilter}
                       onChange={(e) => setHistoryDateFilter(e.target.value)}
-                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0c173c] text-white cursor-pointer rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0a1438] text-white cursor-pointer rounded-lg border border-white/15 focus:outline-none focus:ring-1 focus:ring-brand-400 font-medium"
                     >
-                      <option value="ALL">All Dates</option>
-                      <option value="TODAY">Today</option>
-                      <option value="YESTERDAY">Yesterday</option>
-                      <option value="LAST_7">Last 7 Days</option>
+                      <option value="ALL" className="bg-[#0a1438] text-white py-1">All Dates</option>
+                      <option value="TODAY" className="bg-[#0a1438] text-white py-1">Today</option>
+                      <option value="YESTERDAY" className="bg-[#0a1438] text-white py-1">Yesterday</option>
+                      <option value="LAST_7" className="bg-[#0a1438] text-white py-1">Last 7 Days</option>
                     </select>
 
                     {/* Priority Filter */}
                     <select
                       value={historyPriorityFilter}
                       onChange={(e) => setHistoryPriorityFilter(e.target.value)}
-                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0c173c] text-white cursor-pointer rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                      className="glass-input text-[11px] py-1.5 px-2 bg-[#0a1438] text-white cursor-pointer rounded-lg border border-white/15 focus:outline-none focus:ring-1 focus:ring-brand-400 font-medium"
                     >
-                      <option value="ALL">All Priorities</option>
-                      <option value="High">High Priority</option>
-                      <option value="Medium">Medium Priority</option>
-                      <option value="Low">Low Priority</option>
+                      <option value="ALL" className="bg-[#0a1438] text-white py-1">All Priorities</option>
+                      <option value="High" className="bg-[#0a1438] text-white py-1">High Priority</option>
+                      <option value="Medium" className="bg-[#0a1438] text-white py-1">Medium Priority</option>
+                      <option value="Low" className="bg-[#0a1438] text-white py-1">Low Priority</option>
                     </select>
                   </div>
                 </div>
               </div>
 
               {/* Sidebar Content (Completed Tasks List) */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
                 {filteredCompletedTasks.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-500 py-12 text-center">
                     <History size={40} className="text-slate-600 mb-2 opacity-60" />
