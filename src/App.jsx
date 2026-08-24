@@ -2527,6 +2527,7 @@ export default function App() {
       tag: 'Undefined',
       requiredTime: '',
       screenshotUrl: '',
+      timerStartedAt: null,
       position: 0
     };
 
@@ -2570,7 +2571,8 @@ export default function App() {
           dueDate: data[0].due_date,
           reminderTime: data[0].reminder_time,
           screenshotUrl: data[0].screenshot_url,
-          requiredTime: data[0].required_time || ''
+          requiredTime: data[0].required_time || '',
+          timerStartedAt: data[0].timer_started_at || null
         };
         // Replace temp task with real task
         setDepartments(prev => prev.map(d => ({
