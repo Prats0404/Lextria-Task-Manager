@@ -109,6 +109,24 @@ function formatHoursToHuman(hoursDecimal) {
   return `${hrs} ${hrs === 1 ? 'hr' : 'hrs'}, ${mins} min`;
 }
 
+function parseTimeToMinutes(timeStr) {
+  return Math.round(parseTimeToHours(timeStr) * 60);
+}
+
+function formatTimerDisplay(task, _tick) {
+  if (!task.timerStartedAt || !task.requiredTime || task.completed) return null;
+  
+  const allottedMin = parseTimeToMinutes(task.requiredTime);
+  if (allottedMin <= 0) return null;
+  
+  const elapsedMin = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 60000);
+  
+  if (elapsedMin <= allottedMin) {
+    return { text: `${elapsedMin}/${allottedMin}`, overtime: false };
+  }
+  return { text: `+${elapsedMin - allottedMin}`, overtime: true };
+}
+
 function renderDescriptionWithLinks(text) {
   if (!text) return null;
   const linkRegex = /((?:https?:\/\/|www\.)[^\s]+|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
@@ -139,7 +157,7 @@ function renderDescriptionWithLinks(text) {
 }
 
 // --- SORTABLE TASK ITEM ---
-function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClick }) {
+function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClick, timerTick }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: 'Task', task, employeeId }
@@ -199,6 +217,19 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
             <Clock size={10} /> {task.requiredTime}
           </span>
         )}
+        {(() => {
+          const timerInfo = formatTimerDisplay(task, timerTick);
+          if (!timerInfo) return null;
+          return (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1 font-bold transition-all min-w-[2.5rem] justify-center ${
+              timerInfo.overtime
+                ? 'bg-red-500/20 text-red-400 border-red-500/30 animate-pulse'
+                : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+            }`}>
+              ⏱ {timerInfo.text}
+            </span>
+          );
+        })()}
         {task.tag && task.tag !== 'Undefined' && (
           <span className={`text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1 font-medium transition-colors ${
             task.tag === 'Under 5 min' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' :
@@ -218,7 +249,7 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
 }
 
 // --- SORTABLE EMPLOYEE CARD (KANBAN COLUMN) ---
-function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask, deleteTask, addTask, onTaskClick, priorityFilter, dueDateFilter, archivedTasks = [] }) {
+function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask, deleteTask, addTask, onTaskClick, priorityFilter, dueDateFilter, archivedTasks = [], timerTick }) {
   const [isAdding, setIsAdding] = useState(false);
   const [titleInput, setTitleInput] = useState('');
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -344,6 +375,7 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
               updateTask={updateTask} 
               deleteTask={deleteTask} 
               onTaskClick={onTaskClick}
+              timerTick={timerTick}
             />
           ))}
         </SortableContext>
@@ -1809,6 +1841,22 @@ export default function App() {
     }
   }, []);
 
+  const [timerTick, setTimerTick] = useState(0);
+
+  useEffect(() => {
+    const hasActiveTimers = departments.some(d =>
+      d.boards?.some(b =>
+        b.employees?.some(e =>
+          e.tasks?.some(t => t.timerStartedAt && !t.completed)
+        )
+      )
+    );
+    if (!hasActiveTimers) return;
+    
+    const interval = setInterval(() => setTimerTick(t => t + 1), 60000);
+    return () => clearInterval(interval);
+  }, [departments]);
+
   const requestNotificationPermission = () => {
     if (!('Notification' in window)) {
       alert('This browser does not support desktop notifications.');
@@ -2131,7 +2179,8 @@ export default function App() {
       reminderTime: t.reminder_time,
       screenshotUrl: t.screenshot_url,
       requiredTime: t.required_time || '',
-      completedDate: t.completed_date
+      completedDate: t.completed_date,
+      timerStartedAt: t.timer_started_at || null
     }));
     setArchivedTasks(archivedTasksList);
 
@@ -2150,7 +2199,8 @@ export default function App() {
               reminderTime: t.reminder_time,
               screenshotUrl: t.screenshot_url,
               requiredTime: t.required_time || '',
-              completedDate: t.completed_date
+              completedDate: t.completed_date,
+              timerStartedAt: t.timer_started_at || null
             }))
           }))
         }))
@@ -2560,6 +2610,26 @@ export default function App() {
 
   const updateTask = async (empId, taskId, updates) => {
     let localUpdates = { ...updates };
+
+    // Find current task to check current values
+    let currentRequiredTime = '';
+    let currentTimerStartedAt = null;
+    const foundEmp = allEmployees.find(e => e.id === empId);
+    if (foundEmp) {
+      const foundTask = foundEmp.tasks?.find(t => t.id === taskId);
+      if (foundTask) {
+        currentRequiredTime = foundTask.requiredTime;
+        currentTimerStartedAt = foundTask.timerStartedAt;
+      }
+    }
+    if (!currentRequiredTime && archivedTasks) {
+      const foundArchived = archivedTasks.find(t => t.id === taskId);
+      if (foundArchived) {
+        currentRequiredTime = foundArchived.requiredTime || foundArchived.required_time;
+        currentTimerStartedAt = foundArchived.timerStartedAt || foundArchived.timer_started_at;
+      }
+    }
+
     if (updates.completed !== undefined) {
       const nowIso = new Date().toISOString();
       const cDate = updates.completed ? nowIso.split('T')[0] : null;
@@ -2568,8 +2638,27 @@ export default function App() {
       localUpdates.completed_at = updates.completed ? nowIso : null;
       localUpdates.completedAt = updates.completed ? nowIso : null;
       localUpdates.updated_at = nowIso;
+      
+      // Stop/reset timer when completed
+      localUpdates.timerStartedAt = null;
+
       if (!updates.completed) {
         localUpdates.is_archived = false;
+      }
+    }
+
+    // Auto-start / change / clear timer when requiredTime is updated
+    if (updates.requiredTime !== undefined) {
+      const newRequiredTime = updates.requiredTime ? updates.requiredTime.trim() : '';
+      if (newRequiredTime && newRequiredTime !== 'Undefined') {
+        // Only set new timer if the required time value actually changed OR there's no active timer
+        if (newRequiredTime !== currentRequiredTime || !currentTimerStartedAt) {
+          const nowIso = new Date().toISOString();
+          localUpdates.timerStartedAt = nowIso;
+        }
+      } else {
+        // If requiredTime is removed/cleared
+        localUpdates.timerStartedAt = null;
       }
     }
 
@@ -2595,6 +2684,7 @@ export default function App() {
                       completedDate: null,
                       completed_at: null,
                       completedAt: null,
+                      timerStartedAt: null,
                       is_archived: false
                     };
                     return { ...e, tasks: [...(e.tasks || []), restoredTask] };
@@ -2676,11 +2766,20 @@ export default function App() {
         dbUpdates.completed_date = null;
         dbUpdates.is_archived = false;
       }
+      dbUpdates.timer_started_at = null;
     }
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
     if (updates.requiredTime !== undefined) {
-      dbUpdates.required_time = updates.requiredTime ? updates.requiredTime.trim() : '';
+      const newRequiredTime = updates.requiredTime ? updates.requiredTime.trim() : '';
+      dbUpdates.required_time = newRequiredTime;
+      if (newRequiredTime && newRequiredTime !== 'Undefined') {
+        if (newRequiredTime !== currentRequiredTime || !currentTimerStartedAt) {
+          dbUpdates.timer_started_at = localUpdates.timerStartedAt || new Date().toISOString();
+        }
+      } else {
+        dbUpdates.timer_started_at = null;
+      }
     }
     if (updates.tag !== undefined) {
       dbUpdates.tag = updates.tag;
@@ -3390,6 +3489,7 @@ export default function App() {
                         priorityFilter={priorityFilter}
                         dueDateFilter={dueDateFilter}
                         archivedTasks={archivedTasks}
+                        timerTick={timerTick}
                       />
                     ))}
                   </SortableContext>
@@ -3400,7 +3500,7 @@ export default function App() {
                   )}
                   <DragOverlay dropAnimation={defaultDropAnimationSideEffects({ duration: 250 })}>
                     {activeDragItem?.type === 'Task' && (
-                      <SortableTaskItem task={activeDragItem.task} employeeId={activeDragItem.employeeId} updateTask={()=>{}} deleteTask={()=>{}} onTaskClick={()=>{}} />
+                      <SortableTaskItem task={activeDragItem.task} employeeId={activeDragItem.employeeId} updateTask={()=>{}} deleteTask={()=>{}} onTaskClick={()=>{}} timerTick={timerTick} />
                     )}
                     {activeDragItem?.type === 'Employee' && (
                       <SortableEmployeeCard 
@@ -3415,6 +3515,7 @@ export default function App() {
                         priorityFilter={priorityFilter}
                         dueDateFilter={dueDateFilter}
                         archivedTasks={archivedTasks}
+                        timerTick={timerTick}
                       />
                     )}
                   </DragOverlay>
