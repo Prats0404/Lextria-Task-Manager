@@ -282,6 +282,24 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
   const hoursPct = Math.round((completedHoursRaw / 8) * 100);
   const isOvertime = completedHoursRaw > 8;
 
+  const activeTimerTask = employee.tasks?.find(t => t.timerStartedAt && !t.completed);
+  let activeTimerDetails = null;
+  if (activeTimerTask) {
+    const allottedMin = parseTimeToMinutes(activeTimerTask.requiredTime);
+    if (allottedMin > 0) {
+      const elapsedMin = Math.floor((Date.now() - new Date(activeTimerTask.timerStartedAt).getTime()) / 60000);
+      const pct = Math.min(Math.round((elapsedMin / allottedMin) * 100), 100);
+      const isTimerOvertime = elapsedMin > allottedMin;
+      activeTimerDetails = {
+        title: activeTimerTask.title,
+        allotted: allottedMin,
+        elapsed: elapsedMin,
+        pct,
+        isOvertime: isTimerOvertime
+      };
+    }
+  }
+
   const activeTasks = employee.tasks.filter(t => {
     if (t.completed) return false;
     if (priorityFilter && priorityFilter !== 'All' && t.priority !== priorityFilter) return false;
@@ -362,6 +380,31 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
               />
             </div>
           </div>
+
+          {activeTimerDetails && (
+            <div className="animate-in fade-in slide-in-from-top duration-300">
+              <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-400 mb-1">
+                <span className="flex items-center gap-1 text-emerald-400 font-medium truncate max-w-[140px]" title={`Active: ${activeTimerDetails.title}`}>
+                  ⚡ Active: {activeTimerDetails.title}
+                </span>
+                <span className={`font-semibold ${activeTimerDetails.isOvertime ? 'text-red-400 animate-pulse font-bold' : 'text-emerald-400'}`}>
+                  {activeTimerDetails.isOvertime 
+                    ? `+${activeTimerDetails.elapsed - activeTimerDetails.allotted} min Overtime` 
+                    : `${activeTimerDetails.elapsed} / ${activeTimerDetails.allotted} min (${activeTimerDetails.pct}%)`}
+                </span>
+              </div>
+              <div className="w-full bg-slate-800/50 rounded-full h-1.5 overflow-hidden p-0">
+                <div 
+                  className={`h-1.5 rounded-full transition-all duration-500 ${
+                    activeTimerDetails.isOvertime 
+                      ? 'bg-gradient-to-r from-red-500 to-rose-400 shadow-[0_0_12px_rgba(239,68,68,0.5)] animate-pulse' 
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                  }`} 
+                  style={{ width: `${activeTimerDetails.pct}%` }} 
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
