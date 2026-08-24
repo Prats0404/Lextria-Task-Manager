@@ -2779,18 +2779,31 @@ export default function App() {
                 };
               } else {
                 // Regular updates in-place
+                // If starting a timer for this task, clear all other tasks' timerStartedAt
+                const clearOtherTimers = localUpdates.timerStartedAt !== undefined && localUpdates.timerStartedAt !== null;
                 return {
                   ...e,
-                  tasks: e.tasks.map(t => t.id === taskId ? { ...t, ...localUpdates } : t)
+                  tasks: e.tasks.map(t => {
+                    if (t.id === taskId) {
+                      return { ...t, ...localUpdates };
+                    } else if (clearOtherTimers) {
+                      return { ...t, timerStartedAt: null };
+                    }
+                    return t;
+                  })
                 };
               }
             }
             // Case 2: The new assignee (append the task to their list with new updates)
             if (isMovingEmployee && e.id === updates.agent_id) {
               const updatedTask = taskToMove ? { ...taskToMove, ...localUpdates } : { id: taskId, ...localUpdates };
+              const clearOtherTimers = localUpdates.timerStartedAt !== undefined && localUpdates.timerStartedAt !== null;
               return {
                 ...e,
-                tasks: [...(e.tasks || []), updatedTask]
+                tasks: [
+                  ...(e.tasks || []).map(t => clearOtherTimers ? { ...t, timerStartedAt: null } : t),
+                  updatedTask
+                ]
               };
             }
             return e;
@@ -2836,6 +2849,19 @@ export default function App() {
       // Reset reminder trigger state so if user sets it to the current time, it triggers immediately
       if (triggeredRemindersRef.current) {
         delete triggeredRemindersRef.current[taskId];
+      }
+    }
+    
+    // Stop all other running timers in the database for the targeted agent
+    const targetAgentId = updates.agent_id !== undefined ? updates.agent_id : empId;
+    if (dbUpdates.timer_started_at && targetAgentId) {
+      const { error: resetError } = await supabase
+        .from('tasks')
+        .update({ timer_started_at: null })
+        .eq('agent_id', targetAgentId)
+        .neq('id', taskId);
+      if (resetError) {
+        console.error('Failed to reset other task timers in Supabase:', resetError);
       }
     }
     
