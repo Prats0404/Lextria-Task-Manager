@@ -23,7 +23,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
-  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, SlidersHorizontal, Image, UploadCloud, Link, Clock, Download, FileSpreadsheet
+  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, SlidersHorizontal, Image, UploadCloud, Link, Clock, Download, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 
 
@@ -2055,6 +2055,13 @@ export default function App() {
   const [historyPriorityFilter, setHistoryPriorityFilter] = useState('ALL');
   const [showArchivePage, setShowArchivePage] = useState(false);
   const [archivedTasks, setArchivedTasks] = useState([]);
+  const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
+  const [archiveSortField, setArchiveSortField] = useState('completed_date'); // 'completed_date' | 'created_at' | 'title' | 'agent'
+  const [archiveSortOrder, setArchiveSortOrder] = useState('desc'); // 'desc' | 'asc'
+  const [archivePriorityFilter, setArchivePriorityFilter] = useState('ALL');
+  const [archiveAgentFilter, setArchiveAgentFilter] = useState('ALL');
+  const [archiveCurrentPage, setArchiveCurrentPage] = useState(1);
+  const [archivePageSize, setArchivePageSize] = useState(50);
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState('');
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -3439,6 +3446,70 @@ export default function App() {
     });
   }, [completedTasks, searchHistoryQuery, historyDeptFilter, historyAgentFilter, historyDateFilter, historyPriorityFilter]);
 
+  const filteredAndSortedArchivedTasks = useMemo(() => {
+    let list = [...(archivedTasks || [])];
+
+    // Agent map lookup for fast resolution
+    const agentMap = new Map();
+    departments.forEach(d => {
+      d.boards?.forEach(b => {
+        b.employees?.forEach(e => {
+          agentMap.set(e.id, { name: e.name, color: e.color, boardName: b.name, deptName: d.name });
+        });
+      });
+    });
+
+    // 1. Search Query filter (Task title, description, agent name, priority, date)
+    if (archiveSearchQuery.trim()) {
+      const q = archiveSearchQuery.toLowerCase();
+      list = list.filter(t => {
+        const titleMatch = t.title && t.title.toLowerCase().includes(q);
+        const descMatch = t.description && t.description.toLowerCase().includes(q);
+        const agentMeta = agentMap.get(t.agent_id);
+        const agentMatch = (agentMeta?.name && agentMeta.name.toLowerCase().includes(q)) || (t.agent_id && t.agent_id.toLowerCase().includes(q));
+        const prioMatch = t.priority && t.priority.toLowerCase().includes(q);
+        const dateMatch = (t.completed_date && t.completed_date.includes(q)) || (t.created_at && t.created_at.includes(q));
+        return titleMatch || descMatch || agentMatch || prioMatch || dateMatch;
+      });
+    }
+
+    // 2. Priority Filter
+    if (archivePriorityFilter !== 'ALL') {
+      list = list.filter(t => (t.priority || 'Medium') === archivePriorityFilter);
+    }
+
+    // 3. Agent Filter
+    if (archiveAgentFilter !== 'ALL') {
+      list = list.filter(t => t.agent_id === archiveAgentFilter);
+    }
+
+    // 4. Sorting
+    list.sort((a, b) => {
+      if (archiveSortField === 'completed_date') {
+        const timeA = a.customCompletedAt || a.custom_completed_at || a.completed_date || a.completedDate || a.completed_at;
+        const timeB = b.customCompletedAt || b.custom_completed_at || b.completed_date || b.completedDate || b.completed_at;
+        const valA = timeA ? new Date(timeA).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+        const valB = timeB ? new Date(timeB).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+        return archiveSortOrder === 'asc' ? valA - valB : valB - valA;
+      } else if (archiveSortField === 'created_at') {
+        const valA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const valB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return archiveSortOrder === 'asc' ? valA - valB : valB - valA;
+      } else if (archiveSortField === 'title') {
+        const valA = (a.title || '').toLowerCase();
+        const valB = (b.title || '').toLowerCase();
+        return archiveSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      } else if (archiveSortField === 'agent') {
+        const valA = (agentMap.get(a.agent_id)?.name || a.agent_id || '').toLowerCase();
+        const valB = (agentMap.get(b.agent_id)?.name || b.agent_id || '').toLowerCase();
+        return archiveSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      return 0;
+    });
+
+    return list;
+  }, [archivedTasks, departments, archiveSearchQuery, archivePriorityFilter, archiveAgentFilter, archiveSortField, archiveSortOrder]);
+
   // Synchronize local modal editor state when the selected task changes
   useEffect(() => {
     if (activeTaskDetails) {
@@ -4689,67 +4760,379 @@ export default function App() {
       {/* Task Archive & Reports Page */}
       {showArchivePage && isAdmin && (
         <div className="fixed inset-0 z-[60] bg-[#03071b] flex flex-col animate-in fade-in zoom-in-95 duration-200">
-          <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#07102e]">
+          {/* Top Bar Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-[#07102e]">
             <div className="flex items-center gap-3">
-              <Building2 className="text-brand-400" size={24} />
-              <h2 className="text-2xl font-bold text-white">Archive & Reports</h2>
+              <div className="w-10 h-10 rounded-xl bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400">
+                <Building2 size={22} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white leading-tight">Archive & Reports</h2>
+                <p className="text-xs text-slate-400">Search, filter, and analyze past completed tasks</p>
+              </div>
             </div>
-            <button onClick={() => setShowArchivePage(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer">
-              <X size={20} />
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="px-3.5 py-1.5 bg-brand-500/15 text-brand-300 rounded-lg border border-brand-500/25 text-xs font-semibold flex items-center gap-1.5">
+                <span>Total Archived:</span>
+                <span className="text-white font-bold">{archivedTasks.length}</span>
+              </div>
+              <button 
+                onClick={() => setShowArchivePage(false)} 
+                className="text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-full transition-colors cursor-pointer"
+                title="Close Archive"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-6 bg-[#03071b]">
-            <div className="max-w-6xl mx-auto space-y-6">
-              <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10">
-                <div>
-                  <h3 className="text-white font-medium">Archived Tasks</h3>
-                  <p className="text-sm text-slate-400">Past completed tasks preserved for analytics and reports.</p>
+
+          {/* Main Content Area */}
+          <div className="flex-1 overflow-y-auto p-6 bg-[#03071b] custom-scrollbar">
+            <div className="max-w-6xl mx-auto space-y-5">
+              
+              {/* Search, Sort, & Filter Controls Card */}
+              <div className="bg-[#07102e] border border-white/10 p-4 rounded-xl shadow-lg space-y-3">
+                <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+                  
+                  {/* Search Box */}
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3.5 top-2.5 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      value={archiveSearchQuery}
+                      onChange={(e) => {
+                        setArchiveSearchQuery(e.target.value);
+                        setArchiveCurrentPage(1);
+                      }}
+                      placeholder="Search tasks by name, agent, priority, or date..."
+                      className="glass-input w-full pl-10 pr-9 py-2 text-sm text-white placeholder-slate-400 focus:border-brand-500/60"
+                      spellCheck={false}
+                    />
+                    {archiveSearchQuery && (
+                      <button
+                        onClick={() => {
+                          setArchiveSearchQuery('');
+                          setArchiveCurrentPage(1);
+                        }}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                        title="Clear Search"
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick Sort Dropdown */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 whitespace-nowrap flex items-center gap-1 font-medium">
+                      <ArrowUpDown size={13} className="text-brand-400" /> Sort by:
+                    </span>
+                    <select
+                      value={`${archiveSortField}-${archiveSortOrder}`}
+                      onChange={(e) => {
+                        const [field, order] = e.target.value.split('-');
+                        setArchiveSortField(field);
+                        setArchiveSortOrder(order);
+                        setArchiveCurrentPage(1);
+                      }}
+                      className="bg-white/5 border border-white/10 text-slate-200 text-xs rounded-lg px-3 py-2 outline-none focus:border-brand-500/50 cursor-pointer"
+                    >
+                      <option value="completed_date-desc" className="bg-[#07102e]">Completed Date (Newest first)</option>
+                      <option value="completed_date-asc" className="bg-[#07102e]">Completed Date (Oldest first)</option>
+                      <option value="created_at-desc" className="bg-[#07102e]">Created Date (Newest first)</option>
+                      <option value="created_at-asc" className="bg-[#07102e]">Created Date (Oldest first)</option>
+                      <option value="title-asc" className="bg-[#07102e]">Task Name (A → Z)</option>
+                      <option value="title-desc" className="bg-[#07102e]">Task Name (Z → A)</option>
+                      <option value="agent-asc" className="bg-[#07102e]">Agent Name (A → Z)</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="px-4 py-2 bg-brand-500/20 text-brand-300 rounded-lg border border-brand-500/30 font-semibold">
-                  Total: {archivedTasks.length}
+
+                {/* Second Row: Filters & Reset */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/5 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-slate-400 flex items-center gap-1 font-medium mr-1">
+                      <Filter size={12} className="text-brand-400" /> Filters:
+                    </span>
+
+                    {/* Priority Filter */}
+                    <div className="flex items-center bg-white/5 rounded-lg border border-white/10 p-0.5">
+                      {['ALL', 'High', 'Medium', 'Low'].map(p => (
+                        <button
+                          key={p}
+                          onClick={() => {
+                            setArchivePriorityFilter(p);
+                            setArchiveCurrentPage(1);
+                          }}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                            archivePriorityFilter === p
+                              ? 'bg-brand-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {p === 'ALL' ? 'All Priority' : p}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Agent Filter */}
+                    <select
+                      value={archiveAgentFilter}
+                      onChange={(e) => {
+                        setArchiveAgentFilter(e.target.value);
+                        setArchiveCurrentPage(1);
+                      }}
+                      className="bg-white/5 border border-white/10 text-slate-300 text-xs rounded-lg px-2.5 py-1 outline-none focus:border-brand-500/50 cursor-pointer"
+                    >
+                      <option value="ALL" className="bg-[#07102e]">All Agents</option>
+                      {allEmployees.map(emp => (
+                        <option key={emp.id} value={emp.id} className="bg-[#07102e]">{emp.name}</option>
+                      ))}
+                    </select>
+
+                    {/* Reset Button */}
+                    {(archiveSearchQuery || archivePriorityFilter !== 'ALL' || archiveAgentFilter !== 'ALL' || archiveSortField !== 'completed_date' || archiveSortOrder !== 'desc') && (
+                      <button
+                        onClick={() => {
+                          setArchiveSearchQuery('');
+                          setArchivePriorityFilter('ALL');
+                          setArchiveAgentFilter('ALL');
+                          setArchiveSortField('completed_date');
+                          setArchiveSortOrder('desc');
+                          setArchiveCurrentPage(1);
+                        }}
+                        className="text-brand-400 hover:text-brand-300 text-xs font-semibold px-2 py-1 rounded hover:bg-brand-500/10 transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <RotateCcw size={11} /> Reset All
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Results Count & Page Size */}
+                  <div className="flex items-center gap-3 text-slate-400">
+                    <span>
+                      Found <strong className="text-white">{filteredAndSortedArchivedTasks.length}</strong> matching tasks
+                    </span>
+                    <div className="flex items-center gap-1.5 pl-2 border-l border-white/10">
+                      <span>Per page:</span>
+                      <select
+                        value={archivePageSize}
+                        onChange={(e) => {
+                          setArchivePageSize(Number(e.target.value));
+                          setArchiveCurrentPage(1);
+                        }}
+                        className="bg-white/5 border border-white/10 text-slate-200 text-xs rounded px-2 py-0.5 outline-none cursor-pointer"
+                      >
+                        <option value={25} className="bg-[#07102e]">25</option>
+                        <option value={50} className="bg-[#07102e]">50</option>
+                        <option value={100} className="bg-[#07102e]">100</option>
+                        <option value={500} className="bg-[#07102e]">500</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {archivedTasks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-slate-500 border border-dashed border-white/10 rounded-2xl">
-                  <History size={48} className="mb-4 opacity-50" />
-                  <p>No archived tasks found.</p>
+              {/* Tasks Table */}
+              {filteredAndSortedArchivedTasks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-400 border border-dashed border-white/10 rounded-2xl bg-[#07102e]/50">
+                  <History size={44} className="mb-3 text-slate-500 opacity-60" />
+                  <h3 className="text-base font-semibold text-white mb-1">No matching archived tasks</h3>
+                  <p className="text-xs text-slate-400 max-w-sm text-center">
+                    {archiveSearchQuery || archivePriorityFilter !== 'ALL' || archiveAgentFilter !== 'ALL'
+                      ? 'Try adjusting your search keywords or resetting filters.'
+                      : 'No past completed tasks are currently archived.'}
+                  </p>
+                  {(archiveSearchQuery || archivePriorityFilter !== 'ALL' || archiveAgentFilter !== 'ALL') && (
+                    <button
+                      onClick={() => {
+                        setArchiveSearchQuery('');
+                        setArchivePriorityFilter('ALL');
+                        setArchiveAgentFilter('ALL');
+                        setArchiveCurrentPage(1);
+                      }}
+                      className="mt-4 px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-semibold transition-all cursor-pointer"
+                    >
+                      Clear Filters &amp; Search
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="bg-[#07102e] border border-white/10 rounded-xl overflow-hidden shadow-xl">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-white/5 border-b border-white/10 text-slate-400">
-                      <tr>
-                        <th className="px-6 py-4 font-medium">Task Name</th>
-                        <th className="px-6 py-4 font-medium">Agent Name</th>
-                        <th className="px-6 py-4 font-medium">Priority</th>
-                        <th className="px-6 py-4 font-medium">Created Date</th>
-                        <th className="px-6 py-4 font-medium">Completed Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5 text-slate-300">
-                      {archivedTasks.map(task => {
-                        const agentName = departments.flatMap(d => d.boards?.flatMap(b => b.employees || []) || []).find(a => a.id === task.agent_id)?.name || task.agent_id;
-                        return (
-                        <tr key={task.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-6 py-4 font-medium text-white">{task.title}</td>
-                          <td className="px-6 py-4">{agentName}</td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded text-xs border ${
-                                task.priority === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
-                                task.priority === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
-                                'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                            }`}>
-                              {task.priority || 'Medium'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-slate-400">{formatDateLong(task.created_at)}</td>
-                          <td className="px-6 py-4 text-slate-400">{formatDateLong(task.completed_date || task.completedDate)}</td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-white/5 border-b border-white/10 text-slate-400 select-none">
+                        <tr>
+                          {/* Column: Task Name */}
+                          <th 
+                            onClick={() => {
+                              if (archiveSortField === 'title') {
+                                setArchiveSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setArchiveSortField('title');
+                                setArchiveSortOrder('asc');
+                              }
+                            }}
+                            className="px-6 py-3.5 font-semibold text-xs tracking-wider uppercase cursor-pointer hover:text-white transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Task Name</span>
+                              {archiveSortField === 'title' ? (
+                                archiveSortOrder === 'asc' ? <ArrowUp size={13} className="text-brand-400" /> : <ArrowDown size={13} className="text-brand-400" />
+                              ) : (
+                                <ArrowUpDown size={12} className="opacity-40" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* Column: Agent Name */}
+                          <th 
+                            onClick={() => {
+                              if (archiveSortField === 'agent') {
+                                setArchiveSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setArchiveSortField('agent');
+                                setArchiveSortOrder('asc');
+                              }
+                            }}
+                            className="px-6 py-3.5 font-semibold text-xs tracking-wider uppercase cursor-pointer hover:text-white transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Agent Name</span>
+                              {archiveSortField === 'agent' ? (
+                                archiveSortOrder === 'asc' ? <ArrowUp size={13} className="text-brand-400" /> : <ArrowDown size={13} className="text-brand-400" />
+                              ) : (
+                                <ArrowUpDown size={12} className="opacity-40" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* Column: Priority */}
+                          <th className="px-6 py-3.5 font-semibold text-xs tracking-wider uppercase">
+                            Priority
+                          </th>
+
+                          {/* Column: Created Date */}
+                          <th 
+                            onClick={() => {
+                              if (archiveSortField === 'created_at') {
+                                setArchiveSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setArchiveSortField('created_at');
+                                setArchiveSortOrder('desc');
+                              }
+                            }}
+                            className="px-6 py-3.5 font-semibold text-xs tracking-wider uppercase cursor-pointer hover:text-white transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Created Date</span>
+                              {archiveSortField === 'created_at' ? (
+                                archiveSortOrder === 'asc' ? <ArrowUp size={13} className="text-brand-400" /> : <ArrowDown size={13} className="text-brand-400" />
+                              ) : (
+                                <ArrowUpDown size={12} className="opacity-40" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* Column: Completed Date */}
+                          <th 
+                            onClick={() => {
+                              if (archiveSortField === 'completed_date') {
+                                setArchiveSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setArchiveSortField('completed_date');
+                                setArchiveSortOrder('desc');
+                              }
+                            }}
+                            className="px-6 py-3.5 font-semibold text-xs tracking-wider uppercase cursor-pointer hover:text-white transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Completed Date</span>
+                              {archiveSortField === 'completed_date' ? (
+                                archiveSortOrder === 'asc' ? <ArrowUp size={13} className="text-brand-400" /> : <ArrowDown size={13} className="text-brand-400" />
+                              ) : (
+                                <ArrowUpDown size={12} className="opacity-40" />
+                              )}
+                            </div>
+                          </th>
                         </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 text-slate-300">
+                        {filteredAndSortedArchivedTasks
+                          .slice((archiveCurrentPage - 1) * archivePageSize, archiveCurrentPage * archivePageSize)
+                          .map(task => {
+                            const agent = allEmployees.find(a => a.id === task.agent_id);
+                            const agentName = agent?.name || task.agent_id || 'Unknown';
+                            const completedTimestamp = task.customCompletedAt || task.custom_completed_at || task.completed_date || task.completedDate;
+                            
+                            return (
+                              <tr key={task.id} className="hover:bg-white/5 transition-colors group">
+                                <td className="px-6 py-4 font-medium text-white max-w-xs truncate" title={task.title}>
+                                  {task.title || 'Untitled Task'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-5 h-5 rounded-full ${agent?.color || 'bg-slate-600'} flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0`}>
+                                      {getInitials(agentName)}
+                                    </div>
+                                    <span className="text-slate-200">{agentName}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`px-2.5 py-1 rounded-md text-xs font-semibold border ${
+                                    task.priority === 'High' ? 'bg-red-500/15 text-red-400 border-red-500/30' : 
+                                    task.priority === 'Medium' ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' : 
+                                    'bg-green-500/15 text-green-400 border-green-500/30'
+                                  }`}>
+                                    {task.priority || 'Medium'}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 text-slate-400 whitespace-nowrap text-xs">
+                                  {formatDateLong(task.created_at)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-xs">
+                                  {completedTimestamp ? (
+                                    <span className="text-emerald-300 font-medium bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                      {formatDateLong(completedTimestamp)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-500">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Footer */}
+                  {filteredAndSortedArchivedTasks.length > archivePageSize && (
+                    <div className="p-4 border-t border-white/10 bg-white/3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+                      <div>
+                        Showing <strong className="text-white">{Math.min((archiveCurrentPage - 1) * archivePageSize + 1, filteredAndSortedArchivedTasks.length)}</strong>–<strong className="text-white">{Math.min(archiveCurrentPage * archivePageSize, filteredAndSortedArchivedTasks.length)}</strong> of <strong className="text-white">{filteredAndSortedArchivedTasks.length}</strong> tasks
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={archiveCurrentPage <= 1}
+                          onClick={() => setArchiveCurrentPage(prev => Math.max(1, prev - 1))}
+                          className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                        >
+                          Previous
+                        </button>
+                        <span className="px-2 font-medium text-slate-300">
+                          Page {archiveCurrentPage} of {Math.ceil(filteredAndSortedArchivedTasks.length / archivePageSize) || 1}
+                        </span>
+                        <button
+                          disabled={archiveCurrentPage >= Math.ceil(filteredAndSortedArchivedTasks.length / archivePageSize)}
+                          onClick={() => setArchiveCurrentPage(prev => Math.min(Math.ceil(filteredAndSortedArchivedTasks.length / archivePageSize), prev + 1))}
+                          className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
