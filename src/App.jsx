@@ -2039,6 +2039,7 @@ export default function App() {
   const [localPriority, setLocalPriority] = useState('Medium');
   const [localTag, setLocalTag] = useState('Undefined');
   const [localRequiredTime, setLocalRequiredTime] = useState('');
+  const [localCustomCompletedAt, setLocalCustomCompletedAt] = useState('');
   const [showRequiredTimePopover, setShowRequiredTimePopover] = useState(false);
   const [customTimeVal, setCustomTimeVal] = useState('');
   const [customTimeUnit, setCustomTimeUnit] = useState('min');
@@ -3450,6 +3451,9 @@ export default function App() {
       setLocalPriority(activeTaskDetails.task.priority || 'Medium');
       setLocalTag(activeTaskDetails.task.tag || 'Undefined');
       setLocalRequiredTime(activeTaskDetails.task.requiredTime || '');
+      // Format for datetime-local input (YYYY-MM-DDTHH:mm)
+      const rawCat = activeTaskDetails.task.customCompletedAt || activeTaskDetails.task.custom_completed_at || activeTaskDetails.task.completed_at;
+      setLocalCustomCompletedAt(rawCat ? new Date(rawCat).toISOString().slice(0, 16) : '');
       setShowRequiredTimePopover(false);
       setCustomTimeVal('');
       setLocalAssigneeId(activeTaskDetails.emp.id || '');
@@ -3471,6 +3475,7 @@ export default function App() {
       setLocalPriority('Medium');
       setLocalTag('Undefined');
       setLocalRequiredTime('');
+      setLocalCustomCompletedAt('');
       setShowRequiredTimePopover(false);
       setCustomTimeVal('');
       setLocalAssigneeId('');
@@ -4432,17 +4437,18 @@ export default function App() {
                    </button>
                  </div>
                  {localStatus && (
-                   <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-                     <span className="text-slate-400 flex items-center gap-1.5 font-medium">
-                       <CheckCircle2 size={13} className="text-green-400" /> Completion Date & Time
-                     </span>
-                     <span className="text-emerald-300 font-semibold px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 shadow-sm">
-                       {activeTaskDetails?.task?.customCompletedAt || activeTaskDetails?.task?.custom_completed_at || activeTaskDetails?.task?.completed_at 
-                         ? new Date(activeTaskDetails.task.customCompletedAt || activeTaskDetails.task.custom_completed_at || activeTaskDetails.task.completed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                         : (activeTaskDetails?.task?.completed_date || activeTaskDetails?.task?.completedDate 
-                             ? formatDateLong(activeTaskDetails.task.completed_date || activeTaskDetails.task.completedDate) 
-                             : 'Today')}
-                     </span>
+                   <div className="pt-3 border-t border-white/5 space-y-1.5">
+                     <label className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
+                       <CheckCircle2 size={12} className="text-green-400" /> Completion Date &amp; Time
+                       <span className="ml-1 text-slate-500 font-normal">(editable — used in all reports)</span>
+                     </label>
+                     <input
+                       type="datetime-local"
+                       className="glass-input w-full text-sm text-emerald-300 font-medium"
+                       value={localCustomCompletedAt}
+                       onChange={(e) => setLocalCustomCompletedAt(e.target.value)}
+                       style={{ colorScheme: 'dark' }}
+                     />
                    </div>
                  )}
               </div>
@@ -4616,6 +4622,10 @@ export default function App() {
                   };
                   if (localAssigneeId !== activeTaskDetails.emp.id) {
                     updates.agent_id = localAssigneeId;
+                  }
+                  // If user has set/edited a custom completion date and task is completed, save it
+                  if (localStatus && localCustomCompletedAt) {
+                    updates.customCompletedAt = new Date(localCustomCompletedAt).toISOString();
                   }
                   await updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, updates);
                   setSelectedTaskDetails(null);
