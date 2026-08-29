@@ -625,7 +625,7 @@ function CompletionTrendChart({ tasks }) {
     : '';
 
   return (
-    <div className="glass-card p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between h-full border border-white/10">
+    <div className="glass-card p-6 rounded-2xl relative flex flex-col justify-between h-full border border-white/10">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -650,7 +650,7 @@ function CompletionTrendChart({ tasks }) {
         </div>
       </div>
 
-      <div className="relative w-full overflow-x-auto">
+      <div className="relative w-full">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible select-none">
           <defs>
             <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
@@ -716,26 +716,35 @@ function CompletionTrendChart({ tasks }) {
           ))}
         </svg>
 
-        {hoveredPoint && (
-          <div
-            className="absolute z-20 pointer-events-none bg-[#07102e]/95 border border-brand-500/40 p-2.5 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] backdrop-blur-md text-xs space-y-1 animate-in fade-in duration-150"
-            style={{
-              left: `${(hoveredPoint.x / width) * 100}%`,
-              top: `${(hoveredPoint.y / height) * 100 - 45}%`,
-              transform: 'translate(-50%, -100%)'
-            }}
-          >
-            <div className="font-bold text-white">{hoveredPoint.dateStr}</div>
-            <div className="text-slate-300 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-brand-400" />
-              <span>Completed: <strong className="text-brand-300">{hoveredPoint.count} tasks</strong></span>
+        {hoveredPoint && (() => {
+          const isNearTop = hoveredPoint.y < 95;
+          const posX = (hoveredPoint.x / width) * 100;
+          const posY = (hoveredPoint.y / height) * 100;
+          const clampedX = Math.max(16, Math.min(84, posX));
+
+          return (
+            <div
+              className="absolute z-30 pointer-events-none bg-[#07102e]/98 border border-brand-500/50 p-2.5 rounded-xl shadow-[0_4px_25px_rgba(0,0,0,0.8),0_0_15px_rgba(37,99,235,0.3)] backdrop-blur-xl text-xs space-y-1 animate-in fade-in zoom-in-95 duration-150 whitespace-nowrap"
+              style={{
+                left: `${clampedX}%`,
+                top: `${posY}%`,
+                transform: isNearTop ? 'translate(-50%, 14px)' : 'translate(-50%, calc(-100% - 14px))'
+              }}
+            >
+              <div className="font-bold text-white text-xs border-b border-white/10 pb-1 flex items-center justify-between gap-3">
+                <span>📅 {formatDateLong(hoveredPoint.dateStr)}</span>
+              </div>
+              <div className="text-slate-300 flex items-center gap-1.5 pt-0.5">
+                <span className="w-2 h-2 rounded-full bg-brand-400" />
+                <span>Completed: <strong className="text-brand-300 font-semibold">{hoveredPoint.count} tasks</strong></span>
+              </div>
+              <div className="text-slate-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                <span>Hours: <strong className="text-cyan-300 font-semibold">{formatHoursToHuman(hoveredPoint.hours)}</strong></span>
+              </div>
             </div>
-            <div className="text-slate-300 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-cyan-400" />
-              <span>Hours: <strong className="text-cyan-300">{formatHoursToHuman(hoveredPoint.hours)}</strong></span>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
