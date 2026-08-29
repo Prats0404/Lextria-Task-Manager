@@ -989,6 +989,8 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
           };
 
           emp.tasks?.forEach(task => {
+            const rawCustom = task.custom_completed_at || task.customCompletedAt || task.completed_at || task.completedAt || (task.completed_date ? `${task.completed_date}T00:00:00.000Z` : null);
+            const resolvedCompDate = (rawCustom ? rawCustom.split('T')[0] : null) || task.completed_date || task.completedDate || '';
             list.push({
               id: task.id,
               title: task.title || 'Untitled Task',
@@ -996,7 +998,8 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
               priority: task.priority || 'Medium',
               requiredTime: task.requiredTime || task.required_time || task.tag || '',
               createdAt: task.created_at || task.createdAt || '',
-              completedDate: task.completed_date || task.completedDate || '',
+              completedDate: resolvedCompDate,
+              customCompletedAt: rawCustom,
               agentId: emp.id,
               agentName: emp.name,
               boardId: board.id,
@@ -1019,6 +1022,8 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
         deptId: task.department_id || '',
         deptName: 'Archived Tasks'
       };
+      const rawCustom = task.custom_completed_at || task.customCompletedAt || task.completed_at || task.completedAt || (task.completed_date ? `${task.completed_date}T00:00:00.000Z` : null);
+      const resolvedCompDate = (rawCustom ? rawCustom.split('T')[0] : null) || task.completed_date || task.completedDate || '';
       list.push({
         id: task.id,
         title: task.title || 'Untitled Task',
@@ -1026,7 +1031,8 @@ function AnalyticsDashboard({ departments, archivedTasks = [] }) {
         priority: task.priority || 'Medium',
         requiredTime: task.requiredTime || task.required_time || task.tag || '',
         createdAt: task.created_at || task.createdAt || '',
-        completedDate: task.completed_date || task.completedDate || '',
+        completedDate: resolvedCompDate,
+        customCompletedAt: rawCustom,
         agentId: meta.agentId,
         agentName: meta.agentName,
         boardId: meta.boardId,
@@ -1871,9 +1877,11 @@ export default function App() {
   const [assigneeSearchQuery, setAssigneeSearchQuery] = useState('');
 
   // Dynamic toast reminder states & checker
+  const notificationsRef = useRef([]);
   const [notifications, setNotifications] = useState([]);
   const triggeredRemindersRef = useRef({}); // Format: { [taskId]: 'YYYY-MM-DD' }
   const titleFlashIntervalRef = useRef(null);
+  const lastLocalActionTimeRef = useRef(0);
 
   const [notificationPermission, setNotificationPermission] = useState('default');
 
@@ -2199,21 +2207,48 @@ export default function App() {
     }
 
     const today = new Date().toISOString().split('T')[0];
-    
-    // Auto-archive past completed tasks
+    const nowIso = new Date().toISOString();
+    const tasksToArchive = [];
+    const tasksToAssignDate = [];
+
+    // Auto-archive past completed tasks with robust batching
     allTasks.forEach(t => {
+      // Hydrate custom_completed_at if missing but completed_date or completed_at exists
+      if (t.completed && !t.custom_completed_at) {
+        t.custom_completed_at = t.completed_at || (t.completed_date ? `${t.completed_date}T00:00:00.000Z` : nowIso);
+      }
+
       if (t.completed && !t.is_archived) {
-        if (!t.completed_date) {
+        const compDate = (t.custom_completed_at ? t.custom_completed_at.split('T')[0] : null) || t.completed_date;
+        if (!compDate) {
           // If task completed without timestamp, assign today's date so it stays active today
           t.completed_date = today;
-          supabase.from('tasks').update({ completed_date: today }).eq('id', t.id).then();
-        } else if (t.completed_date < today) {
+          t.custom_completed_at = nowIso;
+          tasksToAssignDate.push(t.id);
+        } else if (compDate < today) {
           // Archive tasks completed on previous days
           t.is_archived = true;
-          supabase.from('tasks').update({ is_archived: true }).eq('id', t.id).then();
+          tasksToArchive.push(t.id);
         }
       }
     });
+
+    // Batch update archive status in Supabase so past tasks are safely archived without failing
+    if (tasksToArchive.length > 0) {
+      supabase.from('tasks').update({ is_archived: true }).in('id', tasksToArchive).then(({ error }) => {
+        if (error) console.error("Error batch auto-archiving past tasks in Supabase:", error);
+      });
+    }
+
+    // Batch update missing completion dates
+    if (tasksToAssignDate.length > 0) {
+      supabase.from('tasks').update({ completed_date: today, custom_completed_at: nowIso }).in('id', tasksToAssignDate).then(({ error }) => {
+        if (error) {
+          // Fallback if custom_completed_at column doesn't exist yet in Supabase
+          supabase.from('tasks').update({ completed_date: today }).in('id', tasksToAssignDate).then();
+        }
+      });
+    }
 
     const activeTasks = allTasks.filter(t => !t.is_archived);
     const archivedTasksList = allTasks.filter(t => t.is_archived).map(t => ({
@@ -2223,6 +2258,7 @@ export default function App() {
       screenshotUrl: t.screenshot_url,
       requiredTime: t.required_time || '',
       completedDate: t.completed_date,
+      customCompletedAt: t.custom_completed_at || t.completed_at || (t.completed_date ? `${t.completed_date}T00:00:00.000Z` : null),
       timerStartedAt: t.timer_started_at || null
     }));
     setArchivedTasks(archivedTasksList);
@@ -2243,6 +2279,7 @@ export default function App() {
               screenshotUrl: t.screenshot_url,
               requiredTime: t.required_time || '',
               completedDate: t.completed_date,
+              customCompletedAt: t.custom_completed_at || t.completed_at || (t.completed_date ? `${t.completed_date}T00:00:00.000Z` : null),
               timerStartedAt: t.timer_started_at || null
             }))
           }))
@@ -2259,9 +2296,11 @@ export default function App() {
     const channel = supabase.channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
         clearTimeout(fetchTimer);
+        const timeSinceLocalAction = Date.now() - lastLocalActionTimeRef.current;
+        const delay = timeSinceLocalAction < 2500 ? 2500 : 1000;
         fetchTimer = setTimeout(() => {
           fetchData();
-        }, 1000); // 1-second debounce to prevent drag-and-drop animation glitches
+        }, delay);
       })
       .subscribe();
 
@@ -2571,6 +2610,7 @@ export default function App() {
       requiredTime: '',
       screenshotUrl: '',
       timerStartedAt: null,
+      customCompletedAt: null,
       position: 0
     };
 
@@ -2615,7 +2655,8 @@ export default function App() {
           reminderTime: data[0].reminder_time,
           screenshotUrl: data[0].screenshot_url,
           requiredTime: data[0].required_time || '',
-          timerStartedAt: data[0].timer_started_at || null
+          timerStartedAt: data[0].timer_started_at || null,
+          customCompletedAt: data[0].custom_completed_at || null
         };
         // Replace temp task with real task
         setDepartments(prev => prev.map(d => ({
@@ -2654,17 +2695,22 @@ export default function App() {
   };
 
   const updateTask = async (empId, taskId, updates) => {
+    lastLocalActionTimeRef.current = Date.now();
     let localUpdates = { ...updates };
 
     // Find current task to check current values
     let currentRequiredTime = '';
     let currentTimerStartedAt = null;
+    let currentCustomCompletedAt = null;
+    let currentCompletedDate = null;
     const foundEmp = allEmployees.find(e => e.id === empId);
     if (foundEmp) {
       const foundTask = foundEmp.tasks?.find(t => t.id === taskId);
       if (foundTask) {
         currentRequiredTime = foundTask.requiredTime;
         currentTimerStartedAt = foundTask.timerStartedAt;
+        currentCustomCompletedAt = foundTask.customCompletedAt || foundTask.custom_completed_at;
+        currentCompletedDate = foundTask.completedDate || foundTask.completed_date;
       }
     }
     if (!currentRequiredTime && archivedTasks) {
@@ -2672,23 +2718,48 @@ export default function App() {
       if (foundArchived) {
         currentRequiredTime = foundArchived.requiredTime || foundArchived.required_time;
         currentTimerStartedAt = foundArchived.timerStartedAt || foundArchived.timer_started_at;
+        currentCustomCompletedAt = foundArchived.customCompletedAt || foundArchived.custom_completed_at;
+        currentCompletedDate = foundArchived.completedDate || foundArchived.completed_date;
       }
     }
 
     if (updates.completed !== undefined) {
       const nowIso = new Date().toISOString();
-      const cDate = updates.completed ? nowIso.split('T')[0] : null;
-      localUpdates.completed_date = cDate;
-      localUpdates.completedDate = cDate;
-      localUpdates.completed_at = updates.completed ? nowIso : null;
-      localUpdates.completedAt = updates.completed ? nowIso : null;
-      localUpdates.updated_at = nowIso;
+      const todayStr = nowIso.split('T')[0];
       
+      if (updates.completed) {
+        // PRESERVE ORIGINAL COMPLETION DATE if task was completed previously
+        const preserveDate = currentCompletedDate || todayStr;
+        const preserveCustomAt = currentCustomCompletedAt || nowIso;
+        
+        localUpdates.completed_date = preserveDate;
+        localUpdates.completedDate = preserveDate;
+        localUpdates.completed_at = preserveCustomAt;
+        localUpdates.completedAt = preserveCustomAt;
+        localUpdates.custom_completed_at = preserveCustomAt;
+        localUpdates.customCompletedAt = preserveCustomAt;
+        localUpdates.updated_at = nowIso;
+      } else {
+        localUpdates.completed_date = null;
+        localUpdates.completedDate = null;
+        localUpdates.completed_at = null;
+        localUpdates.completedAt = null;
+        localUpdates.updated_at = nowIso;
+        localUpdates.is_archived = false;
+      }
+
       // Stop/reset timer when completed
       localUpdates.timerStartedAt = null;
+    }
 
-      if (!updates.completed) {
-        localUpdates.is_archived = false;
+    if (updates.customCompletedAt !== undefined || updates.custom_completed_at !== undefined) {
+      const val = updates.customCompletedAt || updates.custom_completed_at;
+      localUpdates.customCompletedAt = val;
+      localUpdates.custom_completed_at = val;
+      if (val) {
+        const dStr = val.split('T')[0];
+        localUpdates.completed_date = dStr;
+        localUpdates.completedDate = dStr;
       }
     }
 
@@ -2819,12 +2890,22 @@ export default function App() {
     if (updates.completed !== undefined) {
       dbUpdates.completed = updates.completed;
       if (updates.completed) {
-        dbUpdates.completed_date = new Date().toISOString().split('T')[0];
+        const preserveDate = currentCompletedDate || new Date().toISOString().split('T')[0];
+        const preserveCustomAt = currentCustomCompletedAt || new Date().toISOString();
+        dbUpdates.completed_date = preserveDate;
+        dbUpdates.custom_completed_at = preserveCustomAt;
       } else {
         dbUpdates.completed_date = null;
         dbUpdates.is_archived = false;
       }
       dbUpdates.timer_started_at = null;
+    }
+    if (updates.customCompletedAt !== undefined || updates.custom_completed_at !== undefined) {
+      const val = updates.customCompletedAt || updates.custom_completed_at;
+      dbUpdates.custom_completed_at = val;
+      if (val) {
+        dbUpdates.completed_date = val.split('T')[0];
+      }
     }
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
@@ -2865,8 +2946,17 @@ export default function App() {
       }
     }
     
-    const { error } = await supabase.from('tasks').update(dbUpdates).eq('id', taskId);
-    if (error) console.error('Failed to update task in Supabase:', error);
+    let { error } = await supabase.from('tasks').update(dbUpdates).eq('id', taskId);
+    if (error && error.message && error.message.includes('custom_completed_at')) {
+      const fallbackUpdates = { ...dbUpdates };
+      delete fallbackUpdates.custom_completed_at;
+      const retry = await supabase.from('tasks').update(fallbackUpdates).eq('id', taskId);
+      if (retry.error) {
+        console.error('Failed to update task in Supabase fallback:', retry.error);
+      }
+    } else if (error) {
+      console.error('Failed to update task in Supabase:', error);
+    }
   };
 
   const deleteTask = async (empId, taskId) => {
@@ -3089,6 +3179,7 @@ export default function App() {
 
     (archivedTasks || []).forEach(task => {
       const emp = empMap.get(task.agent_id) || { id: task.agent_id, name: 'Agent', color: 'bg-slate-500' };
+      const rawCustom = task.custom_completed_at || task.customCompletedAt || task.completed_at || task.completedAt || (task.completed_date ? `${task.completed_date}T00:00:00.000Z` : null);
       list.push({
         task: {
           id: task.id,
@@ -3098,6 +3189,8 @@ export default function App() {
           priority: task.priority || 'Medium',
           completed_date: task.completed_date || task.completedDate,
           completed_at: task.completed_at || task.completedAt || task.updated_at,
+          custom_completed_at: rawCustom,
+          customCompletedAt: rawCustom,
           created_at: task.created_at || task.createdAt
         },
         emp,
@@ -3108,6 +3201,8 @@ export default function App() {
 
     return list.sort((a, b) => {
       const getTimestamp = (t) => {
+        if (t.custom_completed_at) return new Date(t.custom_completed_at).getTime();
+        if (t.customCompletedAt) return new Date(t.customCompletedAt).getTime();
         if (t.completed_at) return new Date(t.completed_at).getTime();
         if (t.completedAt) return new Date(t.completedAt).getTime();
         if (t.updated_at) return new Date(t.updated_at).getTime();
@@ -3148,8 +3243,9 @@ export default function App() {
       // Priority filter
       if (historyPriorityFilter !== 'ALL' && (task.priority || 'Medium') !== historyPriorityFilter) return false;
 
-      // Date filter
-      const taskDate = task.completed_date || task.completedDate || (task.created_at ? task.created_at.split('T')[0] : '');
+      // Date filter using true Custom Completion Date
+      const customVal = task.custom_completed_at || task.customCompletedAt;
+      const taskDate = (customVal ? customVal.split('T')[0] : null) || task.completed_date || task.completedDate || (task.created_at ? task.created_at.split('T')[0] : '');
       if (historyDateFilter === 'TODAY' && taskDate !== todayStrVal) return false;
       if (historyDateFilter === 'YESTERDAY' && taskDate !== yesterdayStrVal) return false;
       if (historyDateFilter === 'LAST_7' && taskDate < d7StrVal) return false;
@@ -4131,15 +4227,32 @@ export default function App() {
                 )}
               </div>
 
-              <div className="flex items-center justify-between bg-white/5 p-4 rounded-lg border border-white/10">
-                 <span className="text-sm text-slate-300 font-medium">Status</span>
-                 <button 
-                  onClick={() => setLocalStatus(!localStatus)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${localStatus ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-300'}`}
-                 >
-                   {localStatus ? <CheckCircle2 size={16}/> : <Circle size={16}/>}
-                   {localStatus ? 'Completed' : 'Incomplete'}
-                 </button>
+              <div className="bg-white/5 p-4 rounded-lg border border-white/10 space-y-3">
+                 <div className="flex items-center justify-between">
+                   <span className="text-sm text-slate-300 font-medium">Status</span>
+                   <button 
+                    type="button"
+                    onClick={() => setLocalStatus(!localStatus)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer ${localStatus ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-700 text-slate-300'}`}
+                   >
+                     {localStatus ? <CheckCircle2 size={16}/> : <Circle size={16}/>}
+                     {localStatus ? 'Completed' : 'Incomplete'}
+                   </button>
+                 </div>
+                 {localStatus && (
+                   <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                     <span className="text-slate-400 flex items-center gap-1.5 font-medium">
+                       <CheckCircle2 size={13} className="text-green-400" /> Completion Date & Time
+                     </span>
+                     <span className="text-emerald-300 font-semibold px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 shadow-sm">
+                       {activeTaskDetails?.task?.customCompletedAt || activeTaskDetails?.task?.custom_completed_at || activeTaskDetails?.task?.completed_at 
+                         ? new Date(activeTaskDetails.task.customCompletedAt || activeTaskDetails.task.custom_completed_at || activeTaskDetails.task.completed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                         : (activeTaskDetails?.task?.completed_date || activeTaskDetails?.task?.completedDate 
+                             ? formatDateLong(activeTaskDetails.task.completed_date || activeTaskDetails.task.completedDate) 
+                             : 'Today')}
+                     </span>
+                   </div>
+                 )}
               </div>
 
               <div>
