@@ -2399,26 +2399,44 @@ export default function App() {
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const nowIso = new Date().toISOString();
     const tasksToArchive = [];
-    const tasksToAssignDate = [];
+
+    // Helper to resolve true completion timestamp for any task without overwriting database
+    const resolveTaskDates = (t) => {
+      const createdDate = t.created_at ? t.created_at.split('T')[0] : '';
+      let compDate = t.completed_date;
+      let customAt = t.custom_completed_at || t.completed_at;
+
+      if (t.completed) {
+        // If task was created before today and completed without a recorded date (or misassigned today), fall back to created_at
+        if (!compDate || (compDate >= today && createdDate && createdDate < today && (t.is_archived || !t.timer_started_at))) {
+          compDate = (compDate && compDate < today) ? compDate : (createdDate || compDate || today);
+        }
+        if (!customAt || (customAt.startsWith(today) && createdDate && createdDate < today && (t.is_archived || !t.timer_started_at))) {
+          customAt = t.created_at || (compDate ? `${compDate}T00:00:00.000Z` : null);
+        }
+      }
+
+      return {
+        ...t,
+        dueDate: t.due_date,
+        reminderTime: t.reminder_time,
+        screenshotUrl: t.screenshot_url,
+        requiredTime: t.required_time || '',
+        completedDate: compDate,
+        customCompletedAt: customAt,
+        timerStartedAt: t.timer_started_at || null
+      };
+    };
 
     // Auto-archive past completed tasks with robust batching
     allTasks.forEach(t => {
-      // Hydrate custom_completed_at if missing but completed_date or completed_at exists
-      if (t.completed && !t.custom_completed_at) {
-        t.custom_completed_at = t.completed_at || (t.completed_date ? `${t.completed_date}T00:00:00.000Z` : nowIso);
-      }
+      const createdDate = t.created_at ? t.created_at.split('T')[0] : '';
+      const compDate = (t.custom_completed_at ? t.custom_completed_at.split('T')[0] : null) || t.completed_date || createdDate;
 
       if (t.completed && !t.is_archived) {
-        const compDate = (t.custom_completed_at ? t.custom_completed_at.split('T')[0] : null) || t.completed_date;
-        if (!compDate) {
-          // If task completed without timestamp, assign today's date so it stays active today
-          t.completed_date = today;
-          t.custom_completed_at = nowIso;
-          tasksToAssignDate.push(t.id);
-        } else if (compDate < today) {
-          // Archive tasks completed on previous days
+        // If task was completed on a previous day (or created on a previous day and is completed), archive it
+        if (compDate && compDate < today) {
           t.is_archived = true;
           tasksToArchive.push(t.id);
         }
@@ -2432,30 +2450,11 @@ export default function App() {
       });
     }
 
-    // Batch update missing completion dates
-    if (tasksToAssignDate.length > 0) {
-      supabase.from('tasks').update({ completed_date: today, custom_completed_at: nowIso }).in('id', tasksToAssignDate).then(({ error }) => {
-        if (error) {
-          // Fallback if custom_completed_at column doesn't exist yet in Supabase
-          supabase.from('tasks').update({ completed_date: today }).in('id', tasksToAssignDate).then();
-        }
-      });
-    }
-
     const activeTasks = allTasks.filter(t => !t.is_archived);
-    const archivedTasksList = allTasks.filter(t => t.is_archived).map(t => ({
-      ...t,
-      dueDate: t.due_date,
-      reminderTime: t.reminder_time,
-      screenshotUrl: t.screenshot_url,
-      requiredTime: t.required_time || '',
-      completedDate: t.completed_date,
-      customCompletedAt: t.custom_completed_at || t.completed_at || (t.completed_date ? `${t.completed_date}T00:00:00.000Z` : null),
-      timerStartedAt: t.timer_started_at || null
-    }));
+    const archivedTasksList = allTasks.filter(t => t.is_archived).map(resolveTaskDates);
     setArchivedTasks(archivedTasksList);
 
-    const taskData = activeTasks;
+    const taskData = activeTasks.map(resolveTaskDates);
 
     if (deptData) {
       const nested = deptData.map(d => ({
@@ -2464,16 +2463,7 @@ export default function App() {
           ...b,
           employees: (agentData || []).filter(a => a.board_id === b.id).map(a => ({
             ...a,
-            tasks: (taskData || []).filter(t => t.agent_id === a.id).map(t => ({
-              ...t,
-              dueDate: t.due_date,
-              reminderTime: t.reminder_time,
-              screenshotUrl: t.screenshot_url,
-              requiredTime: t.required_time || '',
-              completedDate: t.completed_date,
-              customCompletedAt: t.custom_completed_at || t.completed_at || (t.completed_date ? `${t.completed_date}T00:00:00.000Z` : null),
-              timerStartedAt: t.timer_started_at || null
-            }))
+            tasks: taskData.filter(t => t.agent_id === a.id)
           }))
         }))
       }));
