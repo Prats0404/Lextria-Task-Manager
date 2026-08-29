@@ -1976,12 +1976,9 @@ export default function App() {
     return !sessionStorage.getItem('lextria_splash_shown');
   });
 
-  // 2-day update notice: shown on every refresh until expiry timestamp passes
+  // 2-day update notice: displayed on every refresh for 48 hours until expiry timestamp passes
   const [showUpdateNotice, setShowUpdateNotice] = useState(() => {
     const NOTICE_KEY = 'lextria_update_notice_expiry';
-    const NOTICE_SESSION_KEY = 'lextria_update_notice_dismissed';
-    // Don't re-show within the same page session (dismissed = user clicked Got it)
-    if (sessionStorage.getItem(NOTICE_SESSION_KEY)) return false;
     let expiry = localStorage.getItem(NOTICE_KEY);
     if (!expiry) {
       // First time: set expiry to 48 hours from now
@@ -3561,12 +3558,9 @@ export default function App() {
         }} />
       )}
 
-      {/* 2-Day Update Notice — shown on every refresh until expiry, once per session */}
+      {/* 2-Day Update Notice — displayed on every refresh for 2 days */}
       {!showSplash && showUpdateNotice && (
-        <UpdateNotice onDismiss={() => {
-          sessionStorage.setItem('lextria_update_notice_dismissed', 'true');
-          setShowUpdateNotice(false);
-        }} />
+        <UpdateNotice onDismiss={() => setShowUpdateNotice(false)} />
       )}
 
       {/* Background Orbs */}
@@ -3591,14 +3585,24 @@ export default function App() {
           {/* Global Search Bar */}
           <div className="relative w-full max-w-md hidden lg:block z-50">
             <div className="relative group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-400 transition-colors" size={18} />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-400 transition-colors pointer-events-none" size={17} />
               <input 
                 type="text" 
                 placeholder="Search tasks, tags, agents..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all shadow-[0_0_15px_rgba(0,0,0,0.2)]"
+                className="w-full bg-white/5 border border-white/10 rounded-full py-2 pr-8 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all shadow-[0_0_15px_rgba(0,0,0,0.2)]"
+                style={{ paddingLeft: '2.6rem' }}
               />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                  title="Clear Search"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
             {/* Search Results Dropdown */}
             {searchQuery.trim().length > 0 && (
@@ -4210,15 +4214,24 @@ export default function App() {
                      
                      {/* Search Box */}
                      <div className="relative mb-2">
-                       <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                       <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                        <input
                          type="text"
-                         placeholder="Search Employees"
+                         placeholder="Search Employees..."
                          value={assigneeSearchQuery}
                          onChange={(e) => setAssigneeSearchQuery(e.target.value)}
-                         className="glass-input text-xs w-full pl-9 pr-4 py-1.5 font-sans"
+                         className="glass-input text-xs w-full pr-7 py-1.5 font-sans"
+                         style={{ paddingLeft: '2.25rem' }}
                          autoFocus
                        />
+                       {assigneeSearchQuery && (
+                         <button
+                           onClick={() => setAssigneeSearchQuery('')}
+                           className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                         >
+                           <X size={13} />
+                         </button>
+                       )}
                      </div>
 
                      {/* Employees List */}
@@ -4565,15 +4578,24 @@ export default function App() {
                     
                     {/* Search Tags box */}
                     <div className="relative mb-2">
-                      <Search size={14} className="absolute left-3 top-2 text-slate-400" />
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                       <input
                         type="text"
-                        placeholder="Search Tags"
+                        placeholder="Search Tags..."
                         value={tagSearchQuery}
                         onChange={(e) => setTagSearchQuery(e.target.value)}
-                        className="glass-input text-xs w-full pl-9 pr-4 py-1.5 font-sans"
+                        className="glass-input text-xs w-full pr-7 py-1.5 font-sans"
+                        style={{ paddingLeft: '2.25rem' }}
                         autoFocus
                       />
+                      {tagSearchQuery && (
+                        <button
+                          onClick={() => setTagSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
                     </div>
 
                     {/* Tags List */}
@@ -4786,7 +4808,7 @@ export default function App() {
                   
                   {/* Search Box */}
                   <div className="relative flex-1">
-                    <Search className="absolute left-3.5 top-2.5 text-slate-400" size={16} />
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                     <input
                       type="text"
                       value={archiveSearchQuery}
@@ -4795,7 +4817,8 @@ export default function App() {
                         setArchiveCurrentPage(1);
                       }}
                       placeholder="Search tasks by name, agent, priority, or date..."
-                      className="glass-input w-full pl-10 pr-9 py-2 text-sm text-white placeholder-slate-400 focus:border-brand-500/60"
+                      className="glass-input w-full pr-9 py-2 text-sm text-white placeholder-slate-400 focus:border-brand-500/60"
+                      style={{ paddingLeft: '2.6rem' }}
                       spellCheck={false}
                     />
                     {archiveSearchQuery && (
@@ -4804,7 +4827,7 @@ export default function App() {
                           setArchiveSearchQuery('');
                           setArchiveCurrentPage(1);
                         }}
-                        className="absolute right-3 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
                         title="Clear Search"
                       >
                         <X size={15} />
@@ -5155,19 +5178,21 @@ export default function App() {
               {/* Search Box & Filter Controls */}
               <div className="p-4 border-b border-white/10 bg-white/5 space-y-3">
                 <div className="relative">
-                  <Search className="absolute left-3 top-3 text-slate-400" size={16} />
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                   <input
                     type="text"
                     value={searchHistoryQuery}
                     onChange={(e) => setSearchHistoryQuery(e.target.value)}
                     placeholder="Search completed tasks or agents..."
-                    className="glass-input w-full pl-9 pr-8 py-2 text-sm"
+                    className="glass-input w-full pr-8 py-2 text-sm"
+                    style={{ paddingLeft: '2.6rem' }}
                     spellCheck={false}
                   />
                   {searchHistoryQuery && (
                     <button
                       onClick={() => setSearchHistoryQuery('')}
-                      className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                      title="Clear Search"
                     >
                       <X size={14} />
                     </button>
