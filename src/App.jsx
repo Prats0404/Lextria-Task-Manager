@@ -1717,6 +1717,175 @@ function SortableBoard({
 }
 
 // --- MAIN APP COMPONENT ---
+// --- 2-DAY UPDATE NOTICE ---
+function UpdateNotice({ onDismiss }) {
+  const [activeTab, setActiveTab] = useState('fixes');
+
+  const steps = [
+    {
+      icon: '✅',
+      title: 'Marking a Task Complete',
+      desc: 'Click the circle icon next to any task, or open the task and toggle the Status button to "Completed".'
+    },
+    {
+      icon: '📅',
+      title: 'Viewing Completion Date',
+      desc: 'Open any completed task → the Status card shows the exact "Completion Date & Time" that was permanently recorded.'
+    },
+    {
+      icon: '📊',
+      title: 'Reading Reports',
+      desc: 'All charts, leaderboards, and history use the original completion date — even if a task was accidentally re-completed later.'
+    },
+    {
+      icon: '🗂️',
+      title: 'Task History / Archive',
+      desc: 'Click the "History" or "Archive" button in the top bar to view all completed tasks, filter by agent, date, or department.'
+    },
+    {
+      icon: '🔄',
+      title: 'If a Task Reverts to Incomplete',
+      desc: 'Simply re-mark it as completed. The system will automatically restore the original completion date — your reports will stay accurate.'
+    }
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      style={{ background: 'rgba(5, 10, 30, 0.92)', backdropFilter: 'blur(16px)' }}>
+      <div className="relative w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
+        style={{ background: 'linear-gradient(135deg, #0b193c 0%, #1a2a6c 60%, #0d1a3a 100%)' }}>
+
+        {/* Header Banner */}
+        <div className="flex-shrink-0 px-8 pt-7 pb-5 border-b border-white/10"
+          style={{ background: 'linear-gradient(90deg, #1d4ed8 0%, #2563eb 100%)' }}>
+          <div className="flex items-center gap-3 mb-1">
+            <span className="text-2xl">🛡️</span>
+            <span className="text-xs font-bold tracking-widest text-blue-200 uppercase">System Update — Lextria Task Manager</span>
+          </div>
+          <h1 className="text-2xl font-bold text-white leading-snug">Important Fixes & Feature Update</h1>
+          <p className="text-blue-100 text-sm mt-1 opacity-80">Please read before continuing · This notice will disappear in 2 days</p>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex-shrink-0 flex border-b border-white/10">
+          {[
+            { key: 'fixes', label: '🔧 What Was Fixed' },
+            { key: 'guide', label: '📖 How To Use' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex-1 py-3 text-sm font-semibold transition-all cursor-pointer ${
+                activeTab === tab.key
+                  ? 'text-white border-b-2 border-blue-400 bg-white/5'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-7 space-y-5 custom-scrollbar">
+
+          {activeTab === 'fixes' && (
+            <>
+              {/* Fix 1 */}
+              <div className="rounded-xl border border-green-500/25 bg-green-500/5 p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-7 h-7 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 font-bold text-sm flex-shrink-0">1</span>
+                  <h2 className="text-base font-bold text-green-300">Task Completion Reversion — Fixed</h2>
+                </div>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  A bug caused completed tasks to sometimes revert to <span className="text-yellow-300 font-semibold">Incomplete</span> overnight.
+                  This happened because the system's auto-archiving process was silently failing for some tasks.
+                  The fix ensures all completed tasks are safely and permanently archived at the end of each day — they will no longer revert.
+                </p>
+                <div className="mt-3 p-3 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-400">
+                  <span className="text-blue-300 font-semibold">Technical detail: </span>
+                  Archive writes are now batched and include error logging. A realtime sync delay guard also prevents stale data from overwriting fresh completions.
+                </div>
+              </div>
+
+              {/* Fix 2 */}
+              <div className="rounded-xl border border-blue-500/25 bg-blue-500/5 p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-7 h-7 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-sm flex-shrink-0">2</span>
+                  <h2 className="text-base font-bold text-blue-300">Custom Completion Date — New Feature</h2>
+                </div>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  A new <span className="text-emerald-300 font-semibold">Custom Completion Date</span> is now automatically recorded the moment any task is marked complete.
+                  This date is <span className="font-semibold text-white">permanently saved and never overwritten</span> — even if a task is accidentally un-marked and re-completed later.
+                </p>
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <div className="text-emerald-300 font-semibold text-xs mb-1">✅ What this means for you</div>
+                    <ul className="text-slate-300 text-xs space-y-1 list-disc list-inside">
+                      <li>Reports always show the <span className="font-semibold text-white">true original date</span></li>
+                      <li>Re-completing a task won't change the recorded date</li>
+                      <li>Visible inside every completed task's detail card</li>
+                    </ul>
+                  </div>
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    <div className="text-amber-300 font-semibold text-xs mb-1">⚠️ If a task was re-completed today</div>
+                    <ul className="text-slate-300 text-xs space-y-1 list-disc list-inside">
+                      <li>The original completion date is safely preserved</li>
+                      <li>Open the task → check "Completion Date & Time"</li>
+                      <li>Contact admin if the date looks incorrect</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fix 3 */}
+              <div className="rounded-xl border border-purple-500/25 bg-purple-500/5 p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-7 h-7 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-sm flex-shrink-0">3</span>
+                  <h2 className="text-base font-bold text-purple-300">Reports Use True Completion Dates</h2>
+                </div>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  All analytics dashboards, leaderboards, completion charts, and task history now use the <span className="text-emerald-300 font-semibold">Custom Completion Date</span> as the authoritative source.
+                  This means even if a task was re-completed on a different day due to the old bug, your reports will <span className="font-semibold text-white">reflect the correct original date</span>.
+                </p>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'guide' && (
+            <div className="space-y-4">
+              <p className="text-slate-400 text-sm">A quick reference for the most common actions in Lextria Task Manager.</p>
+              {steps.map((step, i) => (
+                <div key={i} className="flex gap-4 p-4 rounded-xl border border-white/8 bg-white/4 hover:bg-white/8 transition-colors">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/25 flex items-center justify-center text-xl">
+                    {step.icon}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-white text-sm mb-0.5">{step.title}</div>
+                    <div className="text-slate-400 text-xs leading-relaxed">{step.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 px-7 py-5 border-t border-white/10 flex items-center justify-between bg-white/3">
+          <p className="text-xs text-slate-500">This notice will stop appearing after <span className="text-slate-300 font-semibold">2 days</span> from today.</p>
+          <button
+            onClick={onDismiss}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm text-white cursor-pointer transition-all shadow-lg hover:scale-105 active:scale-95"
+            style={{ background: 'linear-gradient(90deg, #1d4ed8, #2563eb)' }}
+          >
+            ✓ Got it, Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- ANIMATED INTRO SPLASH SCREEN ---
 function SplashScreen({ onFinished }) {
   const videoRef = useRef(null);
@@ -1805,6 +1974,21 @@ export default function App() {
   // Splash intro — only shows once per session
   const [showSplash, setShowSplash] = useState(() => {
     return !sessionStorage.getItem('lextria_splash_shown');
+  });
+
+  // 2-day update notice: shown on every refresh until expiry timestamp passes
+  const [showUpdateNotice, setShowUpdateNotice] = useState(() => {
+    const NOTICE_KEY = 'lextria_update_notice_expiry';
+    const NOTICE_SESSION_KEY = 'lextria_update_notice_dismissed';
+    // Don't re-show within the same page session (dismissed = user clicked Got it)
+    if (sessionStorage.getItem(NOTICE_SESSION_KEY)) return false;
+    let expiry = localStorage.getItem(NOTICE_KEY);
+    if (!expiry) {
+      // First time: set expiry to 48 hours from now
+      expiry = String(Date.now() + 48 * 60 * 60 * 1000);
+      localStorage.setItem(NOTICE_KEY, expiry);
+    }
+    return Date.now() < Number(expiry);
   });
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -3308,6 +3492,14 @@ export default function App() {
         <SplashScreen onFinished={() => {
           sessionStorage.setItem('lextria_splash_shown', 'true');
           setShowSplash(false);
+        }} />
+      )}
+
+      {/* 2-Day Update Notice — shown on every refresh until expiry, once per session */}
+      {!showSplash && showUpdateNotice && (
+        <UpdateNotice onDismiss={() => {
+          sessionStorage.setItem('lextria_update_notice_dismissed', 'true');
+          setShowUpdateNotice(false);
         }} />
       )}
 
