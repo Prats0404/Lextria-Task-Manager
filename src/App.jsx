@@ -4028,22 +4028,24 @@ export default function App() {
         </div> {/* end right column */}
       </div> {/* end sidebar layout */}
 
-      {/* Contextual Floating Action Button */}
-      <button
-        onClick={() => {
-          if (!selectedDeptId) {
-            setEditingDepartment(null); setShowAddDeptModal(true);
-          } else if (selectedDeptId && !selectedBoardId) {
-            setEditingBoard(null); setShowAddBoardModal(true);
-          } else if (selectedBoardId) {
-            setEditingEmployee(null); setShowAddEmpModal(true);
-          }
-        }}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-brand-600 hover:bg-brand-500 rounded-full flex items-center justify-center text-white shadow-[0_0_20px_rgba(124,58,237,0.6)] hover:shadow-[0_0_30px_rgba(124,58,237,0.8)] transition-all z-30 hover:scale-110"
-        title={!selectedDeptId ? "Add Department" : !selectedBoardId ? "Add Board" : "Add Agent"}
-      >
-        <Plus size={28} />
-      </button>
+      {/* Contextual Floating Action Button — Tasks tab only */}
+      {activeTab === 'tasks' && (
+        <button
+          onClick={() => {
+            if (!selectedDeptId) {
+              setEditingDepartment(null); setShowAddDeptModal(true);
+            } else if (selectedDeptId && !selectedBoardId) {
+              setEditingBoard(null); setShowAddBoardModal(true);
+            } else if (selectedBoardId) {
+              setEditingEmployee(null); setShowAddEmpModal(true);
+            }
+          }}
+          className="fixed bottom-8 right-8 w-14 h-14 bg-brand-600 hover:bg-brand-500 rounded-full flex items-center justify-center text-white shadow-[0_0_20px_rgba(124,58,237,0.6)] hover:shadow-[0_0_30px_rgba(124,58,237,0.8)] transition-all z-30 hover:scale-110"
+          title={!selectedDeptId ? "Add Department" : !selectedBoardId ? "Add Board" : "Add Agent"}
+        >
+          <Plus size={28} />
+        </button>
+      )}
 
       {/* --- MODALS --- */}
       
