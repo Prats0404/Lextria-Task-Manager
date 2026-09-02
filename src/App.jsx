@@ -200,7 +200,15 @@ function SortableTaskItem({ task, employeeId, updateTask, deleteTask, onTaskClic
             {task.title}
           </p>
         </div>
-        <button onClick={() => deleteTask(employeeId, task.id)} className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all p-1">
+        <button 
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            deleteTask(employeeId, task);
+          }} 
+          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all p-1 cursor-pointer"
+          title="Delete Task"
+        >
           <Trash2 size={14} />
         </button>
       </div>
@@ -335,7 +343,15 @@ function SortableEmployeeCard({ employee, isAdmin, onDelete, onEdit, updateTask,
             <Edit2 size={12} />
           </button>
           {isAdmin && (
-            <button onClick={() => onDelete(employee.id)} className="p-1.5 rounded-md hover:bg-red-500/20 text-slate-300 hover:text-red-400 transition-colors">
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(employee);
+              }} 
+              className="p-1.5 rounded-md hover:bg-red-500/20 text-slate-300 hover:text-red-400 transition-colors cursor-pointer"
+              title="Delete Agent"
+            >
               <Trash2 size={12} />
             </button>
           )}
@@ -2055,6 +2071,8 @@ export default function App() {
 
   const [showAddEmpModal, setShowAddEmpModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [taskToDelete, setTaskToDelete] = useState(null);
   
   const [selectedTaskDetails, setSelectedTaskDetails] = useState(null);
   const [activeDragItem, setActiveDragItem] = useState(null);
@@ -2797,13 +2815,13 @@ export default function App() {
 
   const deleteEmployee = async (empId) => {
     // Optimistic
-    setDepartments(departments.map(d => d.id === selectedDeptId ? {
+    setDepartments(prev => prev.map(d => ({
       ...d,
-      boards: d.boards.map(b => b.id === selectedBoardId ? {
+      boards: d.boards.map(b => ({
         ...b,
         employees: b.employees.filter(e => e.id !== empId)
-      } : b)
-    } : d));
+      }))
+    })));
     await supabase.from('agents').delete().eq('id', empId);
   };
 
@@ -3173,15 +3191,15 @@ export default function App() {
 
   const deleteTask = async (empId, taskId) => {
     // Optimistic
-    setDepartments(departments.map(d => d.id === selectedDeptId ? {
+    setDepartments(prev => prev.map(d => ({
       ...d,
-      boards: d.boards.map(b => b.id === selectedBoardId ? {
+      boards: d.boards.map(b => ({
         ...b,
         employees: b.employees.map(e => e.id === empId ? {
           ...e, tasks: e.tasks.filter(t => t.id !== taskId)
         } : e)
-      } : b)
-    } : d));
+      }))
+    })));
     await supabase.from('tasks').delete().eq('id', taskId);
   };
 
@@ -3977,10 +3995,17 @@ export default function App() {
                         key={emp.id}
                         employee={emp}
                         isAdmin={isAdmin}
-                        onDelete={deleteEmployee}
+                        onDelete={(emp) => setEmployeeToDelete(emp)}
                         onEdit={(emp) => { setEditingEmployee(emp); setShowAddEmpModal(true); }}
                         updateTask={updateTask}
-                        deleteTask={deleteTask}
+                        deleteTask={(empId, taskOrId) => {
+                          if (typeof taskOrId === 'object' && taskOrId !== null) {
+                            setTaskToDelete({ empId, taskId: taskOrId.id, title: taskOrId.title });
+                          } else {
+                            const foundTask = emp.tasks?.find(t => t.id === taskOrId);
+                            setTaskToDelete({ empId, taskId: taskOrId, title: foundTask?.title || 'this task' });
+                          }
+                        }}
                         addTask={addTask}
                         onTaskClick={(empId, taskId) => setSelectedTaskDetails({ empId, taskId })}
                         priorityFilter={priorityFilter}
@@ -4193,23 +4218,106 @@ export default function App() {
             <h2 className="text-xl font-bold mb-4 text-white flex items-center gap-2"><Trash2 className="text-red-400" size={24}/> Delete Board</h2>
             <p className="text-slate-300 mb-6">Are you sure you want to delete <strong className="text-white">{boardToDelete.name}</strong>? All agents and tasks inside will be lost.</p>
             <div className="flex justify-end space-x-3">
-              <button onClick={() => setBoardToDelete(null)} className="px-4 py-2 rounded-lg text-slate-300 hover:bg-white/5">Cancel</button>
-              <button onClick={async () => {
-                const id = boardToDelete.id;
-                setBoardToDelete(null);
-                // Optimistic delete
-                setDepartments(prev => prev.map(d => ({
-                  ...d,
-                  boards: d.boards.filter(b => b.id !== id)
-                })));
-                if (selectedBoardId === id) setSelectedBoardId(null);
+              <button 
+                type="button" 
+                onClick={() => setBoardToDelete(null)} 
+                className="px-4 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                No, Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={async () => {
+                  const id = boardToDelete.id;
+                  setBoardToDelete(null);
+                  // Optimistic delete
+                  setDepartments(prev => prev.map(d => ({
+                    ...d,
+                    boards: d.boards.filter(b => b.id !== id)
+                  })));
+                  if (selectedBoardId === id) setSelectedBoardId(null);
 
-                try {
-                  await supabase.from('boards').delete().eq('id', id);
-                } catch (err) {
-                  console.error(err);
-                }
-              }} className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20">Delete</button>
+                  try {
+                    await supabase.from('boards').delete().eq('id', id);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }} 
+                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20 font-medium transition-all cursor-pointer"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Agent / Employee Modal */}
+      {employeeToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-md p-6 relative animate-in fade-in zoom-in duration-200 border border-red-500/30">
+            <h2 className="text-xl font-bold mb-4 text-white flex items-center gap-2">
+              <Trash2 className="text-red-400" size={24}/> Delete Agent
+            </h2>
+            <p className="text-slate-300 mb-6">
+              Are you sure you want to delete <strong className="text-white">{employeeToDelete.name}</strong>? All tasks assigned to this agent will also be permanently deleted.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button 
+                type="button"
+                onClick={() => setEmployeeToDelete(null)} 
+                className="px-4 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                No, Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={async () => {
+                  const emp = employeeToDelete;
+                  setEmployeeToDelete(null);
+                  await deleteEmployee(emp.id);
+                }} 
+                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20 font-medium transition-all cursor-pointer"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Task Modal */}
+      {taskToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-md p-6 relative animate-in fade-in zoom-in duration-200 border border-red-500/30">
+            <h2 className="text-xl font-bold mb-4 text-white flex items-center gap-2">
+              <Trash2 className="text-red-400" size={24}/> Delete Task
+            </h2>
+            <p className="text-slate-300 mb-6">
+              Are you sure you want to delete <strong className="text-white">{taskToDelete.title || 'this task'}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button 
+                type="button"
+                onClick={() => setTaskToDelete(null)} 
+                className="px-4 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                No, Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={async () => {
+                  const { empId, taskId } = taskToDelete;
+                  setTaskToDelete(null);
+                  if (activeTaskDetails?.task?.id === taskId || selectedTaskDetails?.taskId === taskId) {
+                    setSelectedTaskDetails(null);
+                  }
+                  await deleteTask(empId, taskId);
+                }} 
+                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20 font-medium transition-all cursor-pointer"
+              >
+                Yes, Delete
+              </button>
             </div>
           </div>
         </div>
@@ -4753,42 +4861,59 @@ export default function App() {
             </div>
             
             {/* Modal Actions Footer */}
-            <div className="p-5 border-t border-white/10 flex justify-end space-x-3 bg-white/5 rounded-b-2xl">
-              <button 
-                type="button" 
-                onClick={() => setSelectedTaskDetails(null)} 
-                className="px-4 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition-colors font-medium text-sm cursor-pointer"
+            <div className="p-5 border-t border-white/10 flex items-center justify-between bg-white/5 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setTaskToDelete({
+                    empId: activeTaskDetails.emp.id,
+                    taskId: activeTaskDetails.task.id,
+                    title: activeTaskDetails.task.title
+                  });
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 text-xs font-semibold transition-colors cursor-pointer"
+                title="Delete this task"
               >
-                Cancel
+                <Trash2 size={14} />
+                <span>Delete Task</span>
               </button>
-              <button 
-                type="button" 
-                onClick={async () => {
-                  const updates = {
-                    title: localTitle,
-                    description: localDescription,
-                    completed: localStatus,
-                    priority: localPriority,
-                    tag: localTag,
-                    requiredTime: localRequiredTime,
-                    dueDate: localDueDate,
-                    reminderTime: localReminderTime,
-                    screenshotUrl: localScreenshotUrl
-                  };
-                  if (localAssigneeId !== activeTaskDetails.emp.id) {
-                    updates.agent_id = localAssigneeId;
-                  }
-                  // If user has set/edited a custom completion date and task is completed, save it
-                  if (localStatus && localCustomCompletedAt) {
-                    updates.customCompletedAt = new Date(localCustomCompletedAt).toISOString();
-                  }
-                  await updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, updates);
-                  setSelectedTaskDetails(null);
-                }} 
-                className="glass-button text-sm px-5 py-2 font-semibold bg-brand-600 hover:bg-brand-500 rounded-lg text-white transition-all shadow-[0_0_15px_rgba(124,58,237,0.4)] cursor-pointer"
-              >
-                Save Changes
-              </button>
+              <div className="flex items-center space-x-3">
+                <button 
+                  type="button" 
+                  onClick={() => setSelectedTaskDetails(null)} 
+                  className="px-4 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition-colors font-medium text-sm cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  onClick={async () => {
+                    const updates = {
+                      title: localTitle,
+                      description: localDescription,
+                      completed: localStatus,
+                      priority: localPriority,
+                      tag: localTag,
+                      requiredTime: localRequiredTime,
+                      dueDate: localDueDate,
+                      reminderTime: localReminderTime,
+                      screenshotUrl: localScreenshotUrl
+                    };
+                    if (localAssigneeId !== activeTaskDetails.emp.id) {
+                      updates.agent_id = localAssigneeId;
+                    }
+                    // If user has set/edited a custom completion date and task is completed, save it
+                    if (localStatus && localCustomCompletedAt) {
+                      updates.customCompletedAt = new Date(localCustomCompletedAt).toISOString();
+                    }
+                    await updateTask(activeTaskDetails.emp.id, activeTaskDetails.task.id, updates);
+                    setSelectedTaskDetails(null);
+                  }} 
+                  className="glass-button text-sm px-5 py-2 font-semibold bg-brand-600 hover:bg-brand-500 rounded-lg text-white transition-all shadow-[0_0_15px_rgba(124,58,237,0.4)] cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
         </div>
