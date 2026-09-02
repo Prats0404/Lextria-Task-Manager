@@ -23,7 +23,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
-  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, SlidersHorizontal, Image, UploadCloud, Link, Clock, Download, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown
+  Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, SlidersHorizontal, Image, UploadCloud, Link, Clock, Download, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
+  CheckSquare, Database
 } from 'lucide-react';
 
 
@@ -1952,6 +1953,28 @@ function SplashScreen({ onFinished }) {
   );
 }
 
+// --- QUERIES PAGE PLACEHOLDER ---
+function QueriesPage() {
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
+      <div className="glass-card p-12 rounded-2xl border border-white/10 max-w-md w-full flex flex-col items-center gap-6">
+        <div className="w-20 h-20 rounded-2xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center shadow-[0_0_30px_rgba(37,99,235,0.2)]">
+          <Database size={40} className="text-brand-400" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-2">Queries</h2>
+          <p className="text-slate-400 text-sm leading-relaxed">
+            The Queries section is coming soon. This area will allow you to run custom queries, filters, and reports across your task data.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-accent-500/10 border border-accent-500/20 text-accent-400 text-xs font-semibold tracking-wide uppercase">
+          🚧 Under Construction
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [departments, setDepartments] = useState([]);
 
@@ -1999,6 +2022,7 @@ export default function App() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' | 'queries'
   const [priorityFilter, setPriorityFilter] = useState('All');
   const [dueDateFilter, setDueDateFilter] = useState('All');
   const [isAdmin, setIsAdmin] = useState(false);
@@ -3715,46 +3739,81 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Breadcrumbs Navigation */}
-      <div className="max-w-7xl mx-auto px-6 pt-6">
-        <div className="flex items-center space-x-2 text-sm text-slate-400">
-          <button 
-            onClick={() => { setSelectedDeptId(null); setSelectedBoardId(null); }}
-            className={`hover:text-white transition-colors ${!selectedDeptId ? 'text-brand-400 font-semibold' : ''}`}
-          >
-            Departments
-          </button>
-          
-          {currentDept && (
-            <>
-              <ChevronRight size={14} className="text-slate-600" />
-              <button 
-                onClick={() => setSelectedBoardId(null)}
-                className={`hover:text-white transition-colors flex items-center gap-1 ${selectedDeptId && !selectedBoardId ? 'text-brand-400 font-semibold' : ''}`}
+      {/* Sidebar + Content Layout */}
+      <div className="flex min-h-[calc(100vh-73px)]">
+
+        {/* Left Sidebar */}
+        <aside className="w-16 md:w-56 flex-shrink-0 sticky top-[73px] h-[calc(100vh-73px)] bg-[#07091a]/80 backdrop-blur-xl border-r border-white/8 flex flex-col pt-4 z-30">
+          <nav className="flex flex-col gap-1 px-2">
+            {[
+              { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+              { id: 'queries', label: 'Queries', icon: Database },
+            ].map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                  activeTab === id
+                    ? 'bg-brand-500/20 text-brand-300 shadow-[0_0_12px_rgba(37,99,235,0.2)] border border-brand-500/30'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
+                }`}
+                title={label}
               >
-                <Building2 size={12} /> {currentDept.name}
+                <Icon size={18} className="flex-shrink-0" />
+                <span className="hidden md:inline truncate">{label}</span>
               </button>
-            </>
+            ))}
+          </nav>
+        </aside>
+
+        {/* Right: Breadcrumbs + Main Content */}
+        <div className="flex-1 min-w-0 flex flex-col">
+
+          {/* Breadcrumbs Navigation — only shown on Tasks tab */}
+          {activeTab === 'tasks' && (
+            <div className="px-6 pt-6">
+              <div className="flex items-center space-x-2 text-sm text-slate-400">
+                <button
+                  onClick={() => { setSelectedDeptId(null); setSelectedBoardId(null); }}
+                  className={`hover:text-white transition-colors ${!selectedDeptId ? 'text-brand-400 font-semibold' : ''}`}
+                >
+                  Departments
+                </button>
+
+                {currentDept && (
+                  <>
+                    <ChevronRight size={14} className="text-slate-600" />
+                    <button
+                      onClick={() => setSelectedBoardId(null)}
+                      className={`hover:text-white transition-colors flex items-center gap-1 ${selectedDeptId && !selectedBoardId ? 'text-brand-400 font-semibold' : ''}`}
+                    >
+                      <Building2 size={12} /> {currentDept.name}
+                    </button>
+                  </>
+                )}
+
+                {currentBoard && (
+                  <>
+                    <ChevronRight size={14} className="text-slate-600" />
+                    <span className="text-brand-400 font-semibold flex items-center gap-1">
+                      <Layout size={12} /> {currentBoard.name}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
           )}
 
-          {currentBoard && (
+          {/* Main Content */}
+          <main className="flex-1 px-6 py-6">
+
+          {/* Queries Page */}
+          {activeTab === 'queries' && <QueriesPage />}
+
+          {activeTab === 'tasks' && (showAnalytics && isAdmin ? (
+            <AnalyticsDashboard departments={departments} archivedTasks={archivedTasks} />
+          ) : (
             <>
-              <ChevronRight size={14} className="text-slate-600" />
-              <span className="text-brand-400 font-semibold flex items-center gap-1">
-                <Layout size={12} /> {currentBoard.name}
-              </span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main className="max-w-[1600px] mx-auto px-6 py-6">
-        
-        {showAnalytics && isAdmin ? (
-          <AnalyticsDashboard departments={departments} archivedTasks={archivedTasks} />
-        ) : (
-          <>
             {/* LEVEL 1: DEPARTMENTS LIST */}
             {!selectedDeptId && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -3963,9 +4022,11 @@ export default function App() {
           </div>
         )}
         </>
-        )}
+        ))}
 
       </main>
+        </div> {/* end right column */}
+      </div> {/* end sidebar layout */}
 
       {/* Contextual Floating Action Button */}
       <button
