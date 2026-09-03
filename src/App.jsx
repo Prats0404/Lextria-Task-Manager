@@ -24,8 +24,75 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   Search, Shield, Plus, Trash2, Edit2, CheckCircle2, Circle,
   Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, SlidersHorizontal, Image, UploadCloud, Link, Clock, Download, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
-  CheckSquare, Database
+  CheckSquare, Database, Wrench
 } from 'lucide-react';
+
+// --- SYSTEM UNDER MAINTENANCE MODE ---
+// Set to true to lock down the site and pause all user interactions during upgrades.
+// Set to false to immediately restore the full dashboard once maintenance is complete.
+const IS_UNDER_MAINTENANCE = true;
+
+function MaintenanceScreen() {
+  return (
+    <div className="fixed inset-0 z-[99999] bg-[#03071b]/95 backdrop-blur-2xl flex items-center justify-center p-4 select-none cursor-not-allowed">
+      {/* Ambient glowing background orbs */}
+      <div className="absolute w-[500px] h-[500px] rounded-full bg-brand-600/20 blur-[130px] pointer-events-none -top-20 -left-20" />
+      <div className="absolute w-[450px] h-[450px] rounded-full bg-blue-500/15 blur-[120px] pointer-events-none -bottom-20 -right-20" />
+      <div className="absolute w-[300px] h-[300px] rounded-full bg-amber-500/10 blur-[100px] pointer-events-none top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+
+      <div className="relative max-w-lg w-full bg-[#07102e]/90 border border-white/15 p-8 md:p-10 rounded-3xl shadow-[0_0_80px_rgba(0,0,0,0.9),0_0_40px_rgba(37,99,235,0.25)] text-center animate-in fade-in zoom-in-95 duration-300">
+        {/* Logo with pulsing glow */}
+        <div className="relative inline-block mb-5">
+          <div className="absolute inset-0 rounded-full bg-brand-500/30 blur-md animate-pulse" />
+          <img
+            src="/logo.png"
+            alt="Lextria Logo"
+            className="relative w-16 h-16 rounded-full object-cover border-2 border-brand-500/50 shadow-xl mx-auto"
+          />
+        </div>
+
+        {/* Maintenance Badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold uppercase tracking-wider mb-4">
+          <Wrench size={14} className="animate-spin" style={{ animationDuration: '6s' }} />
+          <span>Under Maintenance</span>
+        </div>
+
+        <h1 className="text-2xl md:text-3xl font-extrabold text-white mb-3 tracking-tight">
+          System Maintenance in Progress
+        </h1>
+
+        <p className="text-slate-300 text-sm leading-relaxed mb-6">
+          The Lextria Task Dashboard is temporarily undergoing scheduled maintenance to add the queries bar login and system upgrades. All activities and interactions are paused to ensure data safety.
+        </p>
+
+        {/* Status Card */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6 text-left space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-400">System Status:</span>
+            <span className="flex items-center gap-1.5 text-amber-400 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              Maintenance Active
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-400">User Interactions:</span>
+            <span className="flex items-center gap-1 text-red-400 font-semibold">
+              <Lock size={12} /> Paused / Locked
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-400">Current Task:</span>
+            <span className="text-brand-300 font-medium">Queries Bar & Login Integration</span>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Thank you for your patience. We will be back online as soon as the updates are completed.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 
 // --- INITIAL DATA & UTILS ---
@@ -3601,6 +3668,9 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen text-slate-100 overflow-x-hidden font-sans">
+      {/* System Under Maintenance Lockout */}
+      {IS_UNDER_MAINTENANCE && <MaintenanceScreen />}
+
       {/* Animated Intro Splash */}
       {showSplash && (
         <SplashScreen onFinished={() => {
