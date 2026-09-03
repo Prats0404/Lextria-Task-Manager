@@ -7,14 +7,12 @@ import SettingsPage from './SettingsPage';
 
 function HubLogo({ size = 32 }) {
   return (
-    <div
+    <img
+      src="/logo.png"
+      alt="Lextria Logo"
       style={{ width: size, height: size }}
-      className="flex shrink-0 items-center justify-center rounded-full border-2 border-[#c9a227] bg-[#16234f] text-[#e6c766]"
-    >
-      <span style={{ fontSize: size * 0.38 }} className="font-serif font-bold leading-none">
-        LR
-      </span>
-    </div>
+      className="shrink-0 rounded-full object-cover border border-white/20 shadow-sm"
+    />
   );
 }
 
