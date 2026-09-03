@@ -182,7 +182,7 @@ export default function QueryTickets({ session }) {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#f4f5f7]">
+    <div className="flex-1 flex flex-col min-h-0 bg-[#f4f5f7] text-slate-800">
       {/* Board Category Pills */}
       <div className="px-6 pt-5 pb-1">
         <div className="flex items-center gap-2 flex-wrap">
@@ -325,10 +325,10 @@ export default function QueryTickets({ session }) {
                 <select
                   value={urgency}
                   onChange={(e) => setUrgency(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#16234f]"
+                  className="w-full rounded-lg border border-slate-300 bg-white text-slate-900 font-medium px-3 py-2 text-sm outline-none focus:border-[#16234f]"
                 >
                   {URGENCIES.map((u) => (
-                    <option key={u} value={u}>{u}</option>
+                    <option key={u} value={u} className="text-slate-900 bg-white">{u}</option>
                   ))}
                 </select>
               </div>
@@ -341,7 +341,7 @@ export default function QueryTickets({ session }) {
                   required
                   rows={5}
                   placeholder="Describe what you need from the leader… (links are auto-detected)"
-                  className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#16234f]"
+                  className="w-full resize-y rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 px-3 py-2 text-sm outline-none focus:border-[#16234f]"
                 />
               </div>
 
@@ -513,7 +513,7 @@ export default function QueryTickets({ session }) {
                     value={newMessage}
                     onChange={e => setNewMessage(e.target.value)}
                     placeholder="Type your reply..."
-                    className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#16234f] outline-none"
+                    className="flex-1 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 rounded-lg px-3 py-2 text-sm focus:border-[#16234f] outline-none"
                   />
                   <button 
                     type="submit"

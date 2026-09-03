@@ -200,10 +200,10 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
             <select
               value={urgencyFilter}
               onChange={(e) => setUrgencyFilter(e.target.value)}
-              className="pl-9 pr-4 py-2 border border-gray-300 rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+              className="pl-9 pr-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 font-medium text-sm focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
             >
-              <option value="All">All Urgencies</option>
-              {URGENCIES.map(u => <option key={u} value={u}>{u}</option>)}
+              <option value="All" className="text-gray-900 bg-white">All Urgencies</option>
+              {URGENCIES.map(u => <option key={u} value={u} className="text-gray-900 bg-white">{u}</option>)}
             </select>
           </div>
           <div className="relative">
@@ -213,7 +213,7 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
               placeholder="Search reports..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 border border-gray-300 rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] w-64"
+              className="pl-9 pr-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 placeholder:text-gray-400 text-sm focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] w-64"
             />
           </div>
         </div>
@@ -301,17 +301,17 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
                   type="text" 
                   value={newProject.client}
                   onChange={e => setNewProject({...newProject, client: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                  className="w-full border border-gray-300 rounded-md p-2 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
                   placeholder="e.g. Acme Corp"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Project Title</label>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Project Title</label>
                 <input 
                   type="text" 
                   value={newProject.title}
                   onChange={e => setNewProject({...newProject, title: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                  className="w-full border border-gray-300 rounded-md p-2 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
                   placeholder="What needs to be done?"
                 />
               </div>
@@ -320,9 +320,9 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
                 <select
                   value={newProject.urgency}
                   onChange={e => setNewProject({...newProject, urgency: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                  className="w-full border border-gray-300 rounded-md p-2 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
                 >
-                  {URGENCIES.map(u => <option key={u} value={u}>{u}</option>)}
+                  {URGENCIES.map(u => <option key={u} value={u} className="text-gray-900 bg-white">{u}</option>)}
                 </select>
               </div>
               <div>
@@ -330,7 +330,7 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
                 <textarea 
                   value={newProject.description}
                   onChange={e => setNewProject({...newProject, description: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] h-24 resize-none"
+                  className="w-full border border-gray-300 rounded-md p-2 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] h-24 resize-none"
                   placeholder="Add details..."
                 />
               </div>
@@ -451,7 +451,7 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
                     value={newUpdate}
                     onChange={(e) => setNewUpdate(e.target.value)}
                     placeholder="Type an update..."
-                    className="flex-1 border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] resize-none h-20 text-sm"
+                    className="flex-1 border border-gray-300 rounded-md p-2 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] resize-none h-20 text-sm"
                   />
                   <button 
                     onClick={postUpdate}
