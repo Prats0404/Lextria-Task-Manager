@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { 
-  Plus, Clock, MessageSquare, X, Send, User, Calendar
+  Plus, Clock, MessageSquare, X, Send, User, Calendar,
+  Download, Eye, Image as ImageIcon
 } from 'lucide-react';
 
 const BOARDS = [
@@ -25,6 +26,7 @@ export default function QueryTickets({ session, agents = [] }) {
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
 
@@ -46,6 +48,17 @@ export default function QueryTickets({ session, agents = [] }) {
     });
   }, []);
 
+  // Close lightbox on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && previewImage) {
+        setPreviewImage(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewImage]);
+
   const resolveAgentId = (userName) => {
     if (!userName) return null;
     const clean = userName.replace(/\s+/g, '').toLowerCase();
@@ -54,21 +67,49 @@ export default function QueryTickets({ session, agents = [] }) {
     return found ? found.id : null;
   };
 
-  const parseTicketQuery = (rawQuery) => {
-    if (!rawQuery) return { text: '', attachments: [] };
-    const marker = '\n\n[ATTACHMENTS]:';
-    const idx = rawQuery.indexOf(marker);
-    if (idx !== -1) {
-      const text = rawQuery.substring(0, idx).trim();
-      const jsonStr = rawQuery.substring(idx + marker.length);
+  const parseTicketData = (ticket, agentList = agentsList) => {
+    if (!ticket) return { text: '', attachments: [], authorName: 'Member', authorRole: 'member' };
+    const rawQuery = ticket.query || '';
+    let authorName = 'Member';
+    let authorRole = 'member';
+    let cleanText = rawQuery;
+    let attachments = [];
+
+    // 1. Extract [AUTHOR]:{"name":"...","role":"..."}
+    const authorMarker = '[AUTHOR]:';
+    if (cleanText.includes(authorMarker)) {
+      const startIdx = cleanText.indexOf(authorMarker) + authorMarker.length;
+      const endIdx = cleanText.indexOf('\n', startIdx);
+      const jsonStr = endIdx === -1 ? cleanText.substring(startIdx).trim() : cleanText.substring(startIdx, endIdx).trim();
       try {
-        const attachments = JSON.parse(jsonStr);
-        return { text, attachments: Array.isArray(attachments) ? attachments : [] };
-      } catch {
-        return { text, attachments: [] };
-      }
+        const parsed = JSON.parse(jsonStr);
+        if (parsed.name) authorName = parsed.name;
+        if (parsed.role) authorRole = parsed.role;
+      } catch {}
+      cleanText = endIdx === -1 ? '' : cleanText.substring(endIdx).trim();
+    } else if (ticket.created_by) {
+      const list = agentList.length > 0 ? agentList : agents;
+      const found = list.find(a => a.id === ticket.created_by);
+      if (found) authorName = found.name;
     }
-    return { text: rawQuery, attachments: [] };
+
+    if (cleanText.startsWith('[QUERY]:')) {
+      cleanText = cleanText.replace('[QUERY]:', '').trim();
+    }
+
+    // 2. Extract [ATTACHMENTS]:[...]
+    const attMarker = '[ATTACHMENTS]:';
+    if (cleanText.includes(attMarker)) {
+      const idx = cleanText.indexOf(attMarker);
+      const jsonStr = cleanText.substring(idx + attMarker.length).trim();
+      cleanText = cleanText.substring(0, idx).trim();
+      try {
+        const parsed = JSON.parse(jsonStr);
+        if (Array.isArray(parsed)) attachments = parsed;
+      } catch {}
+    }
+
+    return { text: cleanText, attachments, authorName, authorRole };
   };
 
   const fetchTickets = async () => {
@@ -106,10 +147,14 @@ export default function QueryTickets({ session, agents = [] }) {
     setSubmitting(true);
 
     const agentId = resolveAgentId(session?.name);
+    const authorMeta = {
+      name: session?.name || 'Member',
+      role: session?.role || 'member'
+    };
 
-    let fullQuery = queryText.trim();
+    let fullPayloadText = `[AUTHOR]:${JSON.stringify(authorMeta)}\n\n[QUERY]:\n${queryText.trim()}`;
     if (images.length > 0) {
-      fullQuery += '\n\n[ATTACHMENTS]:' + JSON.stringify(images);
+      fullPayloadText += `\n\n[ATTACHMENTS]:${JSON.stringify(images)}`;
     }
 
     const { data, error } = await supabase
@@ -117,7 +162,7 @@ export default function QueryTickets({ session, agents = [] }) {
       .insert([{
         board: currentBoard.label,
         urgency: urgency,
-        query: fullQuery,
+        query: fullPayloadText,
         created_by: agentId,
         status: 'Open'
       }])
@@ -290,7 +335,7 @@ export default function QueryTickets({ session, agents = [] }) {
                   <p className="text-slate-400 text-sm italic">Nothing here.</p>
                 ) : (
                   openTickets.map(ticket => (
-                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} />
+                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} agentsList={agentsList} />
                   ))
                 )}
               </div>
@@ -307,7 +352,7 @@ export default function QueryTickets({ session, agents = [] }) {
                   <p className="text-slate-400 text-sm italic">Nothing here.</p>
                 ) : (
                   discussingTickets.map(ticket => (
-                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} />
+                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} agentsList={agentsList} />
                   ))
                 )}
               </div>
@@ -326,7 +371,7 @@ export default function QueryTickets({ session, agents = [] }) {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {resolvedTickets.map(ticket => (
-                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} />
+                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} agentsList={agentsList} />
                   ))}
                 </div>
               )}
@@ -448,52 +493,85 @@ export default function QueryTickets({ session, agents = [] }) {
             </button>
 
             {/* Left side: Ticket Details */}
-            <div className="w-full md:w-[340px] bg-slate-50 border-r border-slate-200 p-6 flex flex-col overflow-y-auto">
-              <div className="mb-5">
-                <div className="flex justify-between items-start mb-3">
-                  <span className="font-mono text-xs font-bold px-2 py-1 bg-[#16234f] text-white rounded">
-                    {selectedTicket.code || 'TICKET'}
-                  </span>
-                  <span className={`text-xs font-bold px-2.5 py-1 border rounded-full ${urgencyBadge(selectedTicket.urgency)}`}>
-                    {selectedTicket.urgency}
-                  </span>
-                </div>
-                <h2 className="text-lg font-bold text-slate-900 mt-3">{selectedTicket.board} Query</h2>
-                <div className="flex items-center text-xs text-slate-500 gap-1 mt-1">
-                  <Calendar size={12} /> {new Date(selectedTicket.created_at).toLocaleDateString()}
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-lg p-4 mb-5">
-                {(() => {
-                  const { text, attachments } = parseTicketQuery(selectedTicket.query);
-                  return (
-                    <div>
-                      <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{text}</p>
-                      {attachments.length > 0 && (
-                        <div className="mt-4 pt-3 border-t border-slate-100">
-                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">
-                            Attached Images ({attachments.length})
-                          </span>
-                          <div className="grid grid-cols-2 gap-2">
-                            {attachments.map((att, idx) => (
-                              <a 
-                                key={idx} 
-                                href={att.preview} 
-                                target="_blank" 
-                                rel="noreferrer" 
-                                className="block rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition shadow-xs group"
-                              >
-                                <img src={att.preview} alt={att.name || 'Attachment'} className="w-full h-24 object-cover" />
-                              </a>
-                            ))}
+            <div className="w-full md:w-[360px] bg-slate-50 border-r border-slate-200 p-6 flex flex-col overflow-y-auto">
+              {(() => {
+                const { text, attachments, authorName, authorRole } = parseTicketData(selectedTicket);
+                return (
+                  <>
+                    {/* Prominent Author Banner at the very top */}
+                    <div className="mb-4 bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs">
+                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                        <User size={12} className="text-[#16234f]" /> Raised by
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-[#16234f] text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+                            {authorName.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="truncate">
+                            <span className="font-bold text-slate-900 text-sm block truncate leading-tight">
+                              {authorName}
+                            </span>
+                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                              {authorRole}
+                            </span>
                           </div>
                         </div>
-                      )}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full shrink-0 ${urgencyBadge(selectedTicket.urgency)}`}>
+                          {selectedTicket.urgency}
+                        </span>
+                      </div>
                     </div>
-                  );
-                })()}
-              </div>
+
+                    <div className="mb-4">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="font-mono text-xs font-bold px-2.5 py-1 bg-[#16234f] text-white rounded-md">
+                          {selectedTicket.code || 'TICKET'}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-600 bg-slate-200/70 px-2.5 py-0.5 rounded-full">
+                          {selectedTicket.board}
+                        </span>
+                      </div>
+                      <div className="flex items-center text-xs text-slate-500 gap-1.5 mt-2">
+                        <Calendar size={13} className="text-slate-400" />
+                        <span>Raised {new Date(selectedTicket.created_at).toLocaleDateString()} at {new Date(selectedTicket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    </div>
+
+                    {/* Query Content */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4 shadow-xs">
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{text}</p>
+                    </div>
+
+                    {/* Attached Images */}
+                    {attachments.length > 0 && (
+                      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4 shadow-xs">
+                        <div className="flex items-center justify-between mb-2.5">
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <ImageIcon size={14} className="text-[#16234f]" /> Attached Images ({attachments.length})
+                          </span>
+                          <span className="text-[11px] text-slate-400">Click to view</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {attachments.map((att, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setPreviewImage(att)}
+                              className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 hover:border-[#16234f] transition-all cursor-pointer text-left focus:outline-none"
+                            >
+                              <img src={att.preview} alt={att.name || 'Attachment'} className="w-full h-24 object-cover group-hover:scale-105 transition-transform duration-200" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 text-white text-xs font-semibold">
+                                <Eye size={15} /> Preview
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               <div className="mt-auto pt-4">
                 <p className="text-xs text-slate-500 mb-2 font-semibold uppercase tracking-wider">Update Status</p>
@@ -611,46 +689,116 @@ export default function QueryTickets({ session, agents = [] }) {
           </div>
         </div>
       )}
+
+      {/* Fullscreen Image Lightbox Modal */}
+      {previewImage && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-xs flex flex-col items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div 
+            className="relative max-w-4xl w-full max-h-[92vh] flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Toolbar */}
+            <div className="w-full flex items-center justify-between py-2.5 px-4 bg-slate-900/90 rounded-t-xl text-white">
+              <span className="text-xs sm:text-sm font-medium truncate max-w-md">
+                📷 {previewImage.name || 'Image Attachment'}
+              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewImage.preview}
+                  download={previewImage.name || 'attachment.png'}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-medium transition cursor-pointer"
+                >
+                  <Download size={14} /> Download
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewImage(null)}
+                  className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Image display */}
+            <div className="bg-black/60 w-full flex items-center justify-center p-3 rounded-b-xl overflow-auto max-h-[82vh]">
+              <img
+                src={previewImage.preview}
+                alt={previewImage.name || 'Screenshot'}
+                className="max-h-[78vh] max-w-full object-contain rounded shadow-2xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function TicketCardItem({ ticket, onClick, urgencyBadge }) {
+function TicketCardItem({ ticket, onClick, urgencyBadge, agentsList = [] }) {
   const marker = '\n\n[ATTACHMENTS]:';
   const rawQuery = ticket.query || '';
-  const idx = rawQuery.indexOf(marker);
-  const displayText = idx !== -1 ? rawQuery.substring(0, idx).trim() : rawQuery;
-  const hasAttachments = idx !== -1;
+  let authorName = 'Member';
+  let cleanText = rawQuery;
+
+  // Extract author if encoded
+  if (cleanText.includes('[AUTHOR]:')) {
+    const startIdx = cleanText.indexOf('[AUTHOR]:') + 9;
+    const endIdx = cleanText.indexOf('\n', startIdx);
+    const jsonStr = endIdx === -1 ? cleanText.substring(startIdx).trim() : cleanText.substring(startIdx, endIdx).trim();
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.name) authorName = parsed.name;
+    } catch {}
+    cleanText = endIdx === -1 ? '' : cleanText.substring(endIdx).trim();
+  } else if (ticket.created_by) {
+    const found = agentsList.find(a => a.id === ticket.created_by);
+    if (found) authorName = found.name;
+  }
+
+  if (cleanText.startsWith('[QUERY]:')) {
+    cleanText = cleanText.replace('[QUERY]:', '').trim();
+  }
+
+  const idx = cleanText.indexOf(marker);
+  const displayText = idx !== -1 ? cleanText.substring(0, idx).trim() : cleanText;
+  const hasAttachments = idx !== -1 || cleanText.includes('[ATTACHMENTS]:');
 
   return (
     <div 
       onClick={onClick}
-      className="bg-slate-50 border border-slate-200 hover:border-[#16234f]/40 hover:shadow-md rounded-lg p-3.5 cursor-pointer transition-all"
+      className="bg-slate-50 border border-slate-200 hover:border-[#16234f]/40 hover:shadow-md rounded-lg p-3.5 cursor-pointer transition-all flex flex-col justify-between"
     >
-      <div className="flex justify-between items-start mb-2">
-        <span className="font-mono text-xs font-semibold text-[#16234f]">
-          {ticket.code || 'PENDING'}
-        </span>
-        <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full ${urgencyBadge(ticket.urgency)}`}>
-          {ticket.urgency}
-        </span>
+      <div>
+        <div className="flex justify-between items-start mb-2">
+          <span className="font-mono text-xs font-semibold text-[#16234f]">
+            {ticket.code || 'PENDING'}
+          </span>
+          <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full ${urgencyBadge(ticket.urgency)}`}>
+            {ticket.urgency}
+          </span>
+        </div>
+        
+        <p className="text-sm text-slate-800 line-clamp-3 mb-2 leading-relaxed font-normal">
+          {displayText}
+        </p>
+
+        {hasAttachments && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md mb-2 font-medium border border-blue-200">
+            📷 Image attached
+          </span>
+        )}
       </div>
       
-      <p className="text-sm text-slate-800 line-clamp-3 mb-2 leading-relaxed">
-        {displayText}
-      </p>
-
-      {hasAttachments && (
-        <span className="inline-flex items-center gap-1 text-[11px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md mb-2 font-medium border border-blue-200">
-          📷 Image attached
+      <div className="flex justify-between items-center text-xs text-slate-400 pt-2 border-t border-slate-100 mt-1">
+        <span className="flex items-center gap-1 font-semibold text-slate-700 truncate max-w-[130px]" title={authorName}>
+          <User size={12} className="text-[#16234f]" /> {authorName}
         </span>
-      )}
-      
-      <div className="flex justify-between items-center text-xs text-slate-400 pt-2 border-t border-slate-100">
-        <span className="flex items-center gap-1 font-medium text-slate-500 truncate">
-          {ticket.board}
-        </span>
-        <span className="flex items-center gap-1">
+        <span className="flex items-center gap-1 shrink-0">
           <Clock size={11}/> {new Date(ticket.created_at).toLocaleDateString()}
         </span>
       </div>
