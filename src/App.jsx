@@ -3873,7 +3873,7 @@ export default function App() {
           )}
 
           {/* Main Content */}
-          <main className="flex-1 px-6 py-6">
+          <main className={`flex-1 ${activeTab === 'queries' ? 'p-0 flex flex-col min-h-0 overflow-auto' : 'px-6 py-6'}`}>
 
           {/* Queries Page */}
           {activeTab === 'queries' && <QueryManager agents={allEmployees} isAdmin={isAdmin} />}

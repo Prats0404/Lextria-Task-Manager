@@ -1,0 +1,568 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from './supabaseClient';
+import { 
+  Plus, Clock, MessageSquare, X, Send, User, Calendar
+} from 'lucide-react';
+
+const BOARDS = [
+  { key: 'litigation', label: 'Litigation', prefix: 'LIT' },
+  { key: 'compliance', label: 'Compliance', prefix: 'CMP' },
+  { key: 'misc', label: 'Miscellaneous', prefix: 'MISC' },
+  { key: 'patent', label: 'Patent', prefix: 'PAT' },
+  { key: 'trademark', label: 'Trademark', prefix: 'TM' },
+  { key: 'copyright', label: 'Copyright', prefix: 'CR' },
+  { key: 'design', label: 'Design', prefix: 'DSN' },
+];
+
+const URGENCIES = ['High', 'Medium', 'Low'];
+
+export default function QueryTickets({ session }) {
+  const [selectedBoardKey, setSelectedBoardKey] = useState('litigation');
+  const [activeView, setActiveView] = useState('board'); // 'board' | 'history'
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+
+  // New ticket form
+  const [urgency, setUrgency] = useState('Medium');
+  const [queryText, setQueryText] = useState('');
+  const [images, setImages] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const currentBoard = BOARDS.find(b => b.key === selectedBoardKey) || BOARDS[0];
+
+  useEffect(() => {
+    fetchTickets();
+  }, []);
+
+  const fetchTickets = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('tickets')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching tickets:', error);
+    } else {
+      setTickets(data || []);
+    }
+    setLoading(false);
+  };
+
+  const fetchMessages = async (ticketId) => {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching messages:', error);
+    } else {
+      setMessages(data || []);
+    }
+  };
+
+  const handleCreateTicket = async (e) => {
+    e.preventDefault();
+    if (!queryText.trim()) return;
+    setSubmitting(true);
+
+    const userName = session?.name || 'Member';
+    const userRole = session?.role || 'member';
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .insert([{
+        board: currentBoard.label,
+        urgency: urgency,
+        query: queryText.trim(),
+        created_by: session?.id || null,
+        status: 'Open',
+        images: images.length > 0 ? JSON.stringify(images) : null
+      }])
+      .select();
+
+    setSubmitting(false);
+
+    if (error) {
+      console.error('Error creating ticket:', error);
+      alert('Could not create ticket. Please check Supabase connection.');
+    } else {
+      setShowNewModal(false);
+      setQueryText('');
+      setUrgency('Medium');
+      setImages([]);
+      fetchTickets();
+    }
+  };
+
+  const updateTicketStatus = async (ticketId, newStatus) => {
+    const { error } = await supabase
+      .from('tickets')
+      .update({ status: newStatus })
+      .eq('id', ticketId);
+
+    if (error) {
+      console.error('Error updating status:', error);
+    } else {
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
+      if (selectedTicket && selectedTicket.id === ticketId) {
+        setSelectedTicket(prev => ({ ...prev, status: newStatus }));
+      }
+    }
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !selectedTicket) return;
+
+    const authorName = session?.name || 'Anonymous';
+    const authorRole = session?.role || 'member';
+
+    const { error } = await supabase
+      .from('messages')
+      .insert([{
+        ticket_id: selectedTicket.id,
+        content: newMessage.trim(),
+        agent_id: session?.id || null
+      }]);
+
+    if (error) {
+      console.error('Error sending message:', error);
+    } else {
+      setNewMessage('');
+      fetchMessages(selectedTicket.id);
+    }
+  };
+
+  const openTicket = (ticket) => {
+    setSelectedTicket(ticket);
+    fetchMessages(ticket.id);
+  };
+
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setImages(prev => [...prev, { name: file.name, preview: ev.target.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Filter tickets by selected board
+  const boardTickets = tickets.filter(t => {
+    if (!t.board) return false;
+    const b = t.board.toLowerCase();
+    const curr = currentBoard.label.toLowerCase();
+    const key = currentBoard.key.toLowerCase();
+    return b === curr || b === key || (key === 'misc' && (b === 'misc' || b === 'miscellaneous'));
+  });
+
+  const openTickets = boardTickets.filter(t => (t.status || '').toLowerCase() === 'open');
+  const discussingTickets = boardTickets.filter(t => (t.status || '').toLowerCase() === 'in discussion' || (t.status || '').toLowerCase() === 'discussing');
+  const resolvedTickets = boardTickets.filter(t => (t.status || '').toLowerCase() === 'resolved');
+
+  const urgencyBadge = (u) => {
+    if (u === 'High') return 'bg-red-100 text-red-700 border-red-200';
+    if (u === 'Medium') return 'bg-amber-100 text-amber-700 border-amber-200';
+    return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  };
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-[#f4f5f7]">
+      {/* Board Category Pills */}
+      <div className="px-6 pt-5 pb-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          {BOARDS.map(b => (
+            <button
+              key={b.key}
+              onClick={() => setSelectedBoardKey(b.key)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
+                selectedBoardKey === b.key
+                  ? 'bg-[#16234f] text-white border-[#16234f]'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Board / History Tabs + New Query Button */}
+      <div className="px-6 pt-3 pb-3 flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setActiveView('board')}
+            className={`px-3.5 py-1.5 text-sm font-semibold rounded transition-colors ${
+              activeView === 'board'
+                ? 'text-slate-900 bg-white shadow-sm border border-slate-200'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Board
+          </button>
+          <button
+            onClick={() => setActiveView('history')}
+            className={`px-3.5 py-1.5 text-sm font-semibold rounded transition-colors ${
+              activeView === 'history'
+                ? 'text-slate-900 bg-white shadow-sm border border-slate-200'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            History
+          </button>
+        </div>
+
+        <button 
+          onClick={() => setShowNewModal(true)}
+          className="flex items-center gap-1.5 bg-[#16234f] hover:bg-[#1f3169] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+        >
+          <Plus size={16} /> New query
+        </button>
+      </div>
+
+      {/* Main Kanban Content */}
+      <div className="flex-1 px-6 pb-6 overflow-auto">
+        {loading ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#16234f]"></div>
+          </div>
+        ) : activeView === 'board' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Open Column */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+              <div className="px-5 py-3.5 flex justify-between items-center border-b border-slate-100">
+                <h2 className="font-semibold text-slate-900 text-[15px]">Open</h2>
+                <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{openTickets.length}</span>
+              </div>
+              <div className="p-4 space-y-3 min-h-[100px] flex-1">
+                {openTickets.length === 0 ? (
+                  <p className="text-slate-400 text-sm italic">Nothing here.</p>
+                ) : (
+                  openTickets.map(ticket => (
+                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} />
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* In Discussion Column */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+              <div className="px-5 py-3.5 flex justify-between items-center border-b border-slate-100">
+                <h2 className="font-semibold text-slate-900 text-[15px]">In Discussion</h2>
+                <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{discussingTickets.length}</span>
+              </div>
+              <div className="p-4 space-y-3 min-h-[100px] flex-1">
+                {discussingTickets.length === 0 ? (
+                  <p className="text-slate-400 text-sm italic">Nothing here.</p>
+                ) : (
+                  discussingTickets.map(ticket => (
+                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} />
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* History View */
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="px-5 py-3.5 flex justify-between items-center border-b border-slate-100">
+              <h2 className="font-semibold text-slate-900 text-[15px]">Resolved</h2>
+              <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{resolvedTickets.length}</span>
+            </div>
+            <div className="p-4 min-h-[100px]">
+              {resolvedTickets.length === 0 ? (
+                <p className="text-slate-400 text-sm italic">Nothing here.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {resolvedTickets.map(ticket => (
+                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* New Query Modal */}
+      {showNewModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl relative animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between px-6 pt-6 pb-2 border-b border-slate-100">
+              <h2 className="text-lg font-bold text-[#16234f]">
+                New query · {currentBoard.label}
+              </h2>
+              <button 
+                onClick={() => { setShowNewModal(false); setImages([]); }} 
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTicket} className="p-6">
+              <p className="mb-4 text-sm text-slate-500">
+                Raising as <span className="font-semibold text-slate-800">{session?.name || 'Leader'}</span>
+              </p>
+
+              <div className="mb-4">
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">Urgency</label>
+                <select
+                  value={urgency}
+                  onChange={(e) => setUrgency(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#16234f]"
+                >
+                  {URGENCIES.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">Query</label>
+                <textarea
+                  value={queryText}
+                  onChange={(e) => setQueryText(e.target.value)}
+                  required
+                  rows={5}
+                  placeholder="Describe what you need from the leader… (links are auto-detected)"
+                  className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#16234f]"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">Attach images (optional)</label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {images.map((img, i) => (
+                    <div key={i} className="relative w-16 h-16 rounded-lg border border-slate-200 overflow-hidden group">
+                      <img src={img.preview} alt={img.name} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(i)}
+                        className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 hover:border-[#16234f] flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-[#16234f] transition-colors"
+                  >
+                    <Plus size={16} />
+                    <span className="text-[10px] font-medium">Image</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setShowNewModal(false); setImages([]); }}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="rounded-lg bg-[#16234f] hover:bg-[#1f3169] px-5 py-2 text-sm font-semibold text-white transition disabled:opacity-50"
+                >
+                  {submitting ? 'Raising…' : 'Raise ticket'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Ticket Details & Chat Modal */}
+      {selectedTicket && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl h-[80vh] flex flex-col md:flex-row rounded-2xl shadow-2xl relative overflow-hidden">
+            <button 
+              onClick={() => setSelectedTicket(null)} 
+              className="absolute top-4 right-4 z-10 text-slate-400 hover:text-slate-600"
+            >
+              <X size={20} />
+            </button>
+
+            {/* Left side: Ticket Details */}
+            <div className="w-full md:w-[340px] bg-slate-50 border-r border-slate-200 p-6 flex flex-col overflow-y-auto">
+              <div className="mb-5">
+                <div className="flex justify-between items-start mb-3">
+                  <span className="font-mono text-xs font-bold px-2 py-1 bg-[#16234f] text-white rounded">
+                    {selectedTicket.code || 'TICKET'}
+                  </span>
+                  <span className={`text-xs font-bold px-2.5 py-1 border rounded-full ${urgencyBadge(selectedTicket.urgency)}`}>
+                    {selectedTicket.urgency}
+                  </span>
+                </div>
+                <h2 className="text-lg font-bold text-slate-900 mt-3">{selectedTicket.board} Query</h2>
+                <div className="flex items-center text-xs text-slate-500 gap-1 mt-1">
+                  <Calendar size={12} /> {new Date(selectedTicket.created_at).toLocaleDateString()}
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-lg p-4 mb-5">
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{selectedTicket.query}</p>
+              </div>
+
+              <div className="mt-auto pt-4">
+                <p className="text-xs text-slate-500 mb-2 font-semibold uppercase tracking-wider">Update Status</p>
+                <div className="flex flex-col gap-2">
+                  {selectedTicket.status !== 'Open' && (
+                    <button 
+                      onClick={() => updateTicketStatus(selectedTicket.id, 'Open')} 
+                      className="w-full py-2 text-sm rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium transition-colors"
+                    >
+                      Move to Open
+                    </button>
+                  )}
+                  {selectedTicket.status !== 'In Discussion' && (
+                    <button 
+                      onClick={() => updateTicketStatus(selectedTicket.id, 'In Discussion')} 
+                      className="w-full py-2 text-sm rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium transition-colors"
+                    >
+                      Move to Discussion
+                    </button>
+                  )}
+                  {selectedTicket.status !== 'Resolved' && (
+                    <button 
+                      onClick={() => updateTicketStatus(selectedTicket.id, 'Resolved')} 
+                      className="w-full py-2 text-sm rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium transition-colors"
+                    >
+                      Mark as Resolved
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right side: Messages Thread */}
+            <div className="flex-1 flex flex-col h-full">
+              <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-white">
+                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                  <MessageSquare size={16} className="text-[#16234f]"/> Discussion Thread
+                </h3>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                  selectedTicket.status === 'Open' ? 'bg-amber-100 text-amber-700' :
+                  selectedTicket.status === 'In Discussion' ? 'bg-blue-100 text-blue-700' :
+                  'bg-emerald-100 text-emerald-700'
+                }`}>
+                  {selectedTicket.status}
+                </span>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50">
+                {messages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                    <MessageSquare size={32} className="mb-2 opacity-30" />
+                    <p className="text-sm">No messages yet. Start the conversation!</p>
+                  </div>
+                ) : (
+                  messages.map(msg => {
+                    const isOwn = msg.agent_id === session?.id;
+                    return (
+                      <div key={msg.id} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
+                        <div className={`px-4 py-2.5 rounded-2xl max-w-[80%] text-sm ${
+                          isOwn 
+                            ? 'bg-[#16234f] text-white rounded-br-sm' 
+                            : 'bg-white text-slate-700 border border-slate-200 rounded-bl-sm shadow-sm'
+                        }`}>
+                          {msg.content}
+                        </div>
+                        <span className="text-[10px] text-slate-400 mt-1 px-1">
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Message Input */}
+              {selectedTicket.status !== 'Resolved' ? (
+                <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-200 bg-white flex gap-2">
+                  <input 
+                    type="text" 
+                    value={newMessage}
+                    onChange={e => setNewMessage(e.target.value)}
+                    placeholder="Type your reply..."
+                    className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#16234f] outline-none"
+                  />
+                  <button 
+                    type="submit"
+                    disabled={!newMessage.trim()}
+                    className="bg-[#16234f] hover:bg-[#1f3169] disabled:opacity-40 text-white p-2.5 rounded-lg transition-colors"
+                  >
+                    <Send size={16} />
+                  </button>
+                </form>
+              ) : (
+                <div className="p-4 border-t border-slate-200 bg-slate-50 text-center text-sm text-slate-500">
+                  This query is resolved. Reopen to continue discussion.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TicketCardItem({ ticket, onClick, urgencyBadge }) {
+  return (
+    <div 
+      onClick={onClick}
+      className="bg-slate-50 border border-slate-200 hover:border-[#16234f]/40 hover:shadow-md rounded-lg p-3.5 cursor-pointer transition-all"
+    >
+      <div className="flex justify-between items-start mb-2">
+        <span className="font-mono text-xs font-semibold text-[#16234f]">
+          {ticket.code || 'PENDING'}
+        </span>
+        <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full ${urgencyBadge(ticket.urgency)}`}>
+          {ticket.urgency}
+        </span>
+      </div>
+      
+      <p className="text-sm text-slate-800 line-clamp-3 mb-2 leading-relaxed">
+        {ticket.query}
+      </p>
+      
+      <div className="flex justify-between items-center text-xs text-slate-400 pt-2 border-t border-slate-100">
+        <span className="flex items-center gap-1 font-medium text-slate-500 truncate">
+          {ticket.board}
+        </span>
+        <span className="flex items-center gap-1">
+          <Clock size={11}/> {new Date(ticket.created_at).toLocaleDateString()}
+        </span>
+      </div>
+    </div>
+  );
+}
