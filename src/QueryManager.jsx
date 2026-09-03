@@ -145,7 +145,7 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
         <div className="w-full max-w-sm">
           <div className="mb-8 text-center flex flex-col items-center">
             <HubLogo size={48} />
-            <h1 className="text-2xl font-bold text-slate-900 mt-3">Lextria Team Hub</h1>
+            <h1 className="text-2xl font-bold text-slate-900 mt-3">Query Manager</h1>
             <p className="mt-1 text-sm text-slate-500">Query tickets &amp; project reporting</p>
           </div>
 
@@ -219,37 +219,11 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
   // --- 2. AUTHENTICATED TEAM HUB ---
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#f4f5f7]">
-      {/* Top Banner (Header) */}
+      {/* Sub-Navigation Bar */}
       <header className="border-b-2 border-[#c9a227] bg-[#16234f] text-white shadow-sm shrink-0">
-        <div className="px-4 sm:px-6 py-2.5">
-          <div className="flex items-center justify-between gap-2">
-            {/* Left: Brand Logo & Title */}
-            <div className="flex min-w-0 items-center gap-2.5">
-              <HubLogo size={30} />
-              <span className="truncate text-base sm:text-lg font-bold text-white tracking-wide">
-                Lextria Team Hub
-              </span>
-            </div>
-
-            {/* Right: User badge & Logout */}
-            <div className="flex shrink-0 items-center gap-3">
-              <span className="hidden sm:inline text-sm text-slate-200">
-                {session.name}{' '}
-                <span className="ml-1 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium capitalize text-[#e6c766]">
-                  {session.role}
-                </span>
-              </span>
-              <button
-                onClick={handleLogout}
-                className="shrink-0 rounded-lg border border-white/25 px-2.5 py-1 text-xs font-medium text-slate-100 hover:bg-white/10 transition-colors"
-              >
-                Log out
-              </button>
-            </div>
-          </div>
-
+        <div className="px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 flex-wrap">
           {/* Sub-Navigation Tabs */}
-          <nav className="mt-2.5 flex gap-1 overflow-x-auto pb-0.5">
+          <nav className="flex gap-1 overflow-x-auto pb-0.5">
             {TABS.map((tab) => {
               const active = activeSubTab === tab.id;
               return (
@@ -279,6 +253,22 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
               </button>
             )}
           </nav>
+
+          {/* User badge & Logout */}
+          <div className="flex shrink-0 items-center gap-3">
+            <span className="hidden sm:inline text-sm text-slate-200">
+              {session.name}{' '}
+              <span className="ml-1 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium capitalize text-[#e6c766]">
+                {session.role}
+              </span>
+            </span>
+            <button
+              onClick={handleLogout}
+              className="shrink-0 rounded-lg border border-white/25 px-2.5 py-1 text-xs font-medium text-slate-100 hover:bg-white/10 transition-colors"
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 

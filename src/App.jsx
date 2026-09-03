@@ -3679,7 +3679,7 @@ export default function App() {
               className="w-12 h-12 rounded-full object-cover shadow-lg border border-white/15"
             />
             <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-              Lextria Task Manager
+              Lextria Task & Query Manager
             </h1>
           </div>
 
