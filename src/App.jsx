@@ -30,7 +30,7 @@ import {
 // --- SYSTEM UNDER MAINTENANCE MODE ---
 // Set to true to lock down the site and pause all user interactions during upgrades.
 // Set to false to immediately restore the full dashboard once maintenance is complete.
-const IS_UNDER_MAINTENANCE = true;
+const IS_UNDER_MAINTENANCE = false;
 
 function MaintenanceScreen() {
   return (
