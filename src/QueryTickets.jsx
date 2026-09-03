@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { 
   Plus, Clock, MessageSquare, X, Send, User, Calendar,
-  Download, Eye, Image as ImageIcon, ChevronDown
+  Download, Eye, Image as ImageIcon, ChevronDown,
+  Pencil, Trash2, AlertTriangle
 } from 'lucide-react';
 
 const BOARDS = [
@@ -80,6 +81,18 @@ export default function QueryTickets({ session, agents = [] }) {
   const [images, setImages] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Edit ticket state
+  const [editingTicket, setEditingTicket] = useState(null);
+  const [editUrgency, setEditUrgency] = useState('Medium');
+  const [editQueryText, setEditQueryText] = useState('');
+  const [editImages, setEditImages] = useState([]);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const editFileInputRef = useRef(null);
+
+  // Delete ticket state
+  const [ticketToDelete, setTicketToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const currentBoard = BOARDS.find(b => b.key === selectedBoardKey) || BOARDS[0];
 
@@ -242,6 +255,98 @@ export default function QueryTickets({ session, agents = [] }) {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  // --- Edit Ticket Handlers ---
+  const startEditTicket = (ticket, e) => {
+    if (e) e.stopPropagation();
+    const { text, attachments } = parseTicketData(ticket, agentsList);
+    setEditingTicket(ticket);
+    setEditUrgency(ticket.urgency || 'Medium');
+    setEditQueryText(text);
+    setEditImages(attachments || []);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editQueryText.trim() || !editingTicket) return;
+    setEditSubmitting(true);
+
+    const { authorName, authorRole } = parseTicketData(editingTicket, agentsList);
+    const authorMeta = { name: authorName, role: authorRole };
+
+    let fullPayloadText = `[AUTHOR]:${JSON.stringify(authorMeta)}\n\n[QUERY]:\n${editQueryText.trim()}`;
+    if (editImages.length > 0) {
+      fullPayloadText += `\n\n[ATTACHMENTS]:${JSON.stringify(editImages)}`;
+    }
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .update({
+        urgency: editUrgency,
+        query: fullPayloadText
+      })
+      .eq('id', editingTicket.id)
+      .select();
+
+    setEditSubmitting(false);
+
+    if (error) {
+      console.error('Error updating ticket:', error);
+      alert('Could not update ticket: ' + error.message);
+    } else if (data && data[0]) {
+      const updated = data[0];
+      setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
+      if (selectedTicket?.id === updated.id) {
+        setSelectedTicket(updated);
+      }
+      setEditingTicket(null);
+    }
+  };
+
+  const handleEditImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setEditImages(prev => [...prev, { name: file.name, preview: ev.target.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeEditImage = (index) => {
+    setEditImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // --- Delete Ticket Handlers ---
+  const promptDeleteTicket = (ticket, e) => {
+    if (e) e.stopPropagation();
+    setTicketToDelete(ticket);
+  };
+
+  const confirmDeleteTicket = async () => {
+    if (!ticketToDelete) return;
+    setIsDeleting(true);
+
+    // Delete associated messages first
+    await supabase.from('messages').delete().eq('ticket_id', ticketToDelete.id);
+
+    // Delete ticket
+    const { error } = await supabase.from('tickets').delete().eq('id', ticketToDelete.id);
+
+    setIsDeleting(false);
+
+    if (error) {
+      console.error('Error deleting ticket:', error);
+      alert('Error deleting ticket: ' + error.message);
+    } else {
+      setTickets(prev => prev.filter(t => t.id !== ticketToDelete.id));
+      if (selectedTicket?.id === ticketToDelete.id) {
+        setSelectedTicket(null);
+      }
+      setTicketToDelete(null);
+    }
+  };
+
   // Filter tickets by selected board
   const boardTickets = tickets.filter(t => {
     if (!t.board) return false;
@@ -251,9 +356,20 @@ export default function QueryTickets({ session, agents = [] }) {
     return b === curr || b === key || (key === 'misc' && (b === 'misc' || b === 'miscellaneous'));
   });
 
-  const openTickets = boardTickets.filter(t => (t.status || '').toLowerCase() === 'open');
-  const discussingTickets = boardTickets.filter(t => (t.status || '').toLowerCase() === 'in discussion' || (t.status || '').toLowerCase() === 'discussing');
-  const resolvedTickets = boardTickets.filter(t => (t.status || '').toLowerCase() === 'resolved');
+  // Auto sort by urgency: High > Medium > Low, then newest first
+  const urgencyWeight = { 'high': 0, 'medium': 1, 'low': 2 };
+  const sortTickets = (ticketList) => {
+    return [...ticketList].sort((a, b) => {
+      const uA = urgencyWeight[(a.urgency || '').toLowerCase()] ?? 1;
+      const uB = urgencyWeight[(b.urgency || '').toLowerCase()] ?? 1;
+      if (uA !== uB) return uA - uB;
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
+  };
+
+  const openTickets = sortTickets(boardTickets.filter(t => (t.status || '').toLowerCase() === 'open'));
+  const discussingTickets = sortTickets(boardTickets.filter(t => (t.status || '').toLowerCase() === 'in discussion' || (t.status || '').toLowerCase() === 'discussing'));
+  const resolvedTickets = sortTickets(boardTickets.filter(t => (t.status || '').toLowerCase() === 'resolved'));
 
   const urgencyBadge = (u) => {
     if (u === 'High') return 'bg-red-100 text-red-700 border-red-200';
@@ -329,7 +445,7 @@ export default function QueryTickets({ session, agents = [] }) {
                 <h2 className="font-semibold text-slate-900 text-[15px]">Open</h2>
                 <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{openTickets.length}</span>
               </div>
-              <div className="p-4 space-y-3 min-h-[100px] flex-1">
+              <div className="p-4 space-y-3 min-h-[120px] max-h-[calc(100vh-230px)] overflow-y-auto pr-1.5 custom-scrollbar flex-1">
                 {openTickets.length === 0 ? (
                   <p className="text-slate-400 text-sm italic">Nothing here.</p>
                 ) : (
@@ -340,7 +456,9 @@ export default function QueryTickets({ session, agents = [] }) {
                       onClick={() => openTicket(ticket)} 
                       urgencyBadge={urgencyBadge} 
                       agentsList={agentsList} 
-                      onOpenImage={(img) => setPreviewImage(img)} 
+                      onOpenImage={(img) => setPreviewImage(img)}
+                      onEdit={(t) => startEditTicket(t)}
+                      onDelete={(t) => promptDeleteTicket(t)}
                     />
                   ))
                 )}
@@ -353,7 +471,7 @@ export default function QueryTickets({ session, agents = [] }) {
                 <h2 className="font-semibold text-slate-900 text-[15px]">In Discussion</h2>
                 <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{discussingTickets.length}</span>
               </div>
-              <div className="p-4 space-y-3 min-h-[100px] flex-1">
+              <div className="p-4 space-y-3 min-h-[120px] max-h-[calc(100vh-230px)] overflow-y-auto pr-1.5 custom-scrollbar flex-1">
                 {discussingTickets.length === 0 ? (
                   <p className="text-slate-400 text-sm italic">Nothing here.</p>
                 ) : (
@@ -365,6 +483,8 @@ export default function QueryTickets({ session, agents = [] }) {
                       urgencyBadge={urgencyBadge} 
                       agentsList={agentsList} 
                       onOpenImage={(img) => setPreviewImage(img)} 
+                      onEdit={(t) => startEditTicket(t)}
+                      onDelete={(t) => promptDeleteTicket(t)}
                     />
                   ))
                 )}
@@ -378,7 +498,7 @@ export default function QueryTickets({ session, agents = [] }) {
               <h2 className="font-semibold text-slate-900 text-[15px]">Resolved</h2>
               <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{resolvedTickets.length}</span>
             </div>
-            <div className="p-4 min-h-[100px]">
+            <div className="p-4 min-h-[120px] max-h-[calc(100vh-230px)] overflow-y-auto pr-1.5 custom-scrollbar">
               {resolvedTickets.length === 0 ? (
                 <p className="text-slate-400 text-sm italic">Nothing here.</p>
               ) : (
@@ -391,6 +511,8 @@ export default function QueryTickets({ session, agents = [] }) {
                       urgencyBadge={urgencyBadge} 
                       agentsList={agentsList} 
                       onOpenImage={(img) => setPreviewImage(img)} 
+                      onEdit={(t) => startEditTicket(t)}
+                      onDelete={(t) => promptDeleteTicket(t)}
                     />
                   ))}
                 </div>
@@ -513,7 +635,7 @@ export default function QueryTickets({ session, agents = [] }) {
             </button>
 
             {/* Left side: Ticket Details */}
-            <div className="w-full md:w-[360px] bg-slate-50 border-r border-slate-200 p-6 flex flex-col overflow-y-auto">
+            <div className="w-full md:w-[380px] bg-slate-50 border-r border-slate-200 p-6 flex flex-col overflow-y-auto custom-scrollbar">
               {(() => {
                 const { text, attachments, authorName, authorRole } = parseTicketData(selectedTicket, agentsList);
                 return (
@@ -528,9 +650,27 @@ export default function QueryTickets({ session, agents = [] }) {
                           {selectedTicket.board} · {new Date(selectedTicket.created_at).toLocaleDateString()} at {new Date(selectedTicket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                         </span>
                       </div>
-                      <span className={`text-[11px] font-bold px-2.5 py-0.5 border rounded-full shrink-0 ${urgencyBadge(selectedTicket.urgency)}`}>
-                        {selectedTicket.urgency}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[11px] font-bold px-2.5 py-0.5 border rounded-full shrink-0 ${urgencyBadge(selectedTicket.urgency)}`}>
+                          {selectedTicket.urgency}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => startEditTicket(selectedTicket, e)}
+                          className="p-1.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-600 hover:text-blue-600 transition cursor-pointer"
+                          title="Edit ticket"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => promptDeleteTicket(selectedTicket, e)}
+                          className="p-1.5 rounded-lg border border-slate-200 hover:border-red-300 hover:bg-red-50 text-slate-600 hover:text-red-600 transition cursor-pointer"
+                          title="Delete ticket"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Attached Images preview right below author name */}
@@ -614,7 +754,7 @@ export default function QueryTickets({ session, agents = [] }) {
                 </span>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50">
+              <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50 custom-scrollbar">
                 {messages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-400">
                     <MessageSquare size={32} className="mb-2 opacity-30" />
@@ -730,11 +870,166 @@ export default function QueryTickets({ session, agents = [] }) {
           </div>
         </div>
       )}
+      {/* Edit Ticket Modal */}
+      {editingTicket && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-[110] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl relative overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-slate-100">
+              <h2 className="text-lg font-bold text-[#16234f] flex items-center gap-2">
+                <Pencil size={18} /> Edit Query Ticket · {editingTicket.code || 'Ticket'}
+              </h2>
+              <button 
+                onClick={() => setEditingTicket(null)}
+                className="text-slate-400 hover:text-slate-600 transition cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+              {/* Urgency selection */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Urgency Level
+                </label>
+                <select
+                  value={editUrgency}
+                  onChange={(e) => setEditUrgency(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-[#16234f] bg-white font-medium"
+                >
+                  <option value="High">High Urgency</option>
+                  <option value="Medium">Medium Urgency</option>
+                  <option value="Low">Low Urgency</option>
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Query Description
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  value={editQueryText}
+                  onChange={(e) => setEditQueryText(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-[#16234f] placeholder-slate-400 custom-scrollbar"
+                  placeholder="Describe your query..."
+                />
+              </div>
+
+              {/* Attached images management */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Attached Screenshots
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => editFileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-800 font-semibold cursor-pointer"
+                  >
+                    <Plus size={13} /> Add Screenshot
+                  </button>
+                  <input
+                    ref={editFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleEditImageUpload}
+                  />
+                </div>
+
+                {editImages.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-2.5 mt-2">
+                    {editImages.map((img, idx) => (
+                      <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 h-20">
+                        <img src={img.preview} alt={img.name || 'Attachment'} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeEditImage(idx)}
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-90 hover:opacity-100 transition cursor-pointer"
+                          title="Remove image"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">No images attached.</p>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingTicket(null)}
+                  className="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="px-5 py-2 text-sm font-semibold rounded-xl bg-[#16234f] text-white hover:bg-[#16234f]/90 transition shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {editSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Popup */}
+      {ticketToDelete && (
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                <Trash2 size={22} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Delete Query Ticket?</h3>
+                <p className="text-xs font-mono text-slate-500 font-semibold mt-0.5">
+                  {ticketToDelete.code || 'Query Ticket'} · {ticketToDelete.board}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              Are you sure you want to delete this query ticket? All discussion replies and attachments will be permanently removed. This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setTicketToDelete(null)}
+                className="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={confirmDeleteTicket}
+                className="px-5 py-2 text-sm font-semibold rounded-xl bg-red-600 hover:bg-red-700 text-white transition shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeleting ? 'Deleting…' : 'Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function TicketCardItem({ ticket, onClick, urgencyBadge, agentsList = [], onOpenImage }) {
+function TicketCardItem({ ticket, onClick, urgencyBadge, agentsList = [], onOpenImage, onEdit, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const { text, attachments, authorName, authorRole } = parseTicketData(ticket, agentsList);
 
@@ -753,16 +1048,42 @@ function TicketCardItem({ ticket, onClick, urgencyBadge, agentsList = [], onOpen
       className="bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md rounded-xl p-4 cursor-pointer transition-all flex flex-col justify-between group"
     >
       <div>
-        {/* Top Header: Author Name and Role in bold Red (#d32f2f) with chevron */}
+        {/* Top Header: Author Name and Role in bold Red (#d32f2f) with action buttons and chevron */}
         <div className="flex items-center justify-between gap-2 mb-2">
           <span className="font-bold text-[#d32f2f] text-[16px] tracking-tight truncate" title={authorFullHeader}>
             {authorFullHeader}
           </span>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full ${urgencyBadge(ticket.urgency)}`}>
               {ticket.urgency}
             </span>
-            <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:text-slate-600 transition">
+            {onEdit && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(ticket);
+                }}
+                className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
+                title="Edit query"
+              >
+                <Pencil size={13} />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(ticket);
+                }}
+                className="p-1 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                title="Delete query"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+            <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:text-slate-600 transition ml-0.5">
               <ChevronDown size={14} />
             </div>
           </div>
