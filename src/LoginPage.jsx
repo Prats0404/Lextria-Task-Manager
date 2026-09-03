@@ -60,9 +60,12 @@ export default function LoginPage({ onLogin }) {
         }
       }
 
-      // 2. Find member by name (case-insensitive)
+      // 2. Find member by name (case-insensitive and space-flexible)
       const matched = allMembers.find(
-        (m) => m.name && m.name.trim().toLowerCase() === cleanUser.toLowerCase()
+        (m) => m.name && (
+          m.name.trim().toLowerCase() === cleanUser.toLowerCase() ||
+          m.name.replace(/\s+/g, '').toLowerCase() === cleanUser.replace(/\s+/g, '').toLowerCase()
+        )
       );
 
       if (!matched) {
