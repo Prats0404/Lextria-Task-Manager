@@ -17,6 +17,50 @@ const BOARDS = [
 
 const URGENCIES = ['High', 'Medium', 'Low'];
 
+export function parseTicketData(ticket, agentList = []) {
+  if (!ticket) return { text: '', attachments: [], authorName: 'Member', authorRole: 'member' };
+  const rawQuery = ticket.query || '';
+  let authorName = 'Member';
+  let authorRole = 'member';
+  let cleanText = rawQuery;
+  let attachments = [];
+
+  // 1. Extract [AUTHOR]:{"name":"...","role":"..."}
+  const authorMarker = '[AUTHOR]:';
+  if (cleanText.includes(authorMarker)) {
+    const startIdx = cleanText.indexOf(authorMarker) + authorMarker.length;
+    const endIdx = cleanText.indexOf('\n', startIdx);
+    const jsonStr = endIdx === -1 ? cleanText.substring(startIdx).trim() : cleanText.substring(startIdx, endIdx).trim();
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.name) authorName = parsed.name;
+      if (parsed.role) authorRole = parsed.role;
+    } catch {}
+    cleanText = endIdx === -1 ? '' : cleanText.substring(endIdx).trim();
+  } else if (ticket.created_by && agentList && agentList.length > 0) {
+    const found = agentList.find(a => a.id === ticket.created_by);
+    if (found) authorName = found.name;
+  }
+
+  if (cleanText.startsWith('[QUERY]:')) {
+    cleanText = cleanText.replace('[QUERY]:', '').trim();
+  }
+
+  // 2. Extract [ATTACHMENTS]:[...]
+  const attMarker = '[ATTACHMENTS]:';
+  if (cleanText.includes(attMarker)) {
+    const idx = cleanText.indexOf(attMarker);
+    const jsonStr = cleanText.substring(idx + attMarker.length).trim();
+    cleanText = cleanText.substring(0, idx).trim();
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (Array.isArray(parsed)) attachments = parsed;
+    } catch {}
+  }
+
+  return { text: cleanText, attachments, authorName, authorRole };
+}
+
 export default function QueryTickets({ session, agents = [] }) {
   const [selectedBoardKey, setSelectedBoardKey] = useState('litigation');
   const [activeView, setActiveView] = useState('board'); // 'board' | 'history'
@@ -65,51 +109,6 @@ export default function QueryTickets({ session, agents = [] }) {
     const list = agentsList.length > 0 ? agentsList : agents;
     const found = list.find(a => a.name?.replace(/\s+/g, '').toLowerCase() === clean);
     return found ? found.id : null;
-  };
-
-  const parseTicketData = (ticket, agentList = agentsList) => {
-    if (!ticket) return { text: '', attachments: [], authorName: 'Member', authorRole: 'member' };
-    const rawQuery = ticket.query || '';
-    let authorName = 'Member';
-    let authorRole = 'member';
-    let cleanText = rawQuery;
-    let attachments = [];
-
-    // 1. Extract [AUTHOR]:{"name":"...","role":"..."}
-    const authorMarker = '[AUTHOR]:';
-    if (cleanText.includes(authorMarker)) {
-      const startIdx = cleanText.indexOf(authorMarker) + authorMarker.length;
-      const endIdx = cleanText.indexOf('\n', startIdx);
-      const jsonStr = endIdx === -1 ? cleanText.substring(startIdx).trim() : cleanText.substring(startIdx, endIdx).trim();
-      try {
-        const parsed = JSON.parse(jsonStr);
-        if (parsed.name) authorName = parsed.name;
-        if (parsed.role) authorRole = parsed.role;
-      } catch {}
-      cleanText = endIdx === -1 ? '' : cleanText.substring(endIdx).trim();
-    } else if (ticket.created_by) {
-      const list = agentList.length > 0 ? agentList : agents;
-      const found = list.find(a => a.id === ticket.created_by);
-      if (found) authorName = found.name;
-    }
-
-    if (cleanText.startsWith('[QUERY]:')) {
-      cleanText = cleanText.replace('[QUERY]:', '').trim();
-    }
-
-    // 2. Extract [ATTACHMENTS]:[...]
-    const attMarker = '[ATTACHMENTS]:';
-    if (cleanText.includes(attMarker)) {
-      const idx = cleanText.indexOf(attMarker);
-      const jsonStr = cleanText.substring(idx + attMarker.length).trim();
-      cleanText = cleanText.substring(0, idx).trim();
-      try {
-        const parsed = JSON.parse(jsonStr);
-        if (Array.isArray(parsed)) attachments = parsed;
-      } catch {}
-    }
-
-    return { text: cleanText, attachments, authorName, authorRole };
   };
 
   const fetchTickets = async () => {
@@ -516,7 +515,7 @@ export default function QueryTickets({ session, agents = [] }) {
             {/* Left side: Ticket Details */}
             <div className="w-full md:w-[360px] bg-slate-50 border-r border-slate-200 p-6 flex flex-col overflow-y-auto">
               {(() => {
-                const { text, attachments, authorName, authorRole } = parseTicketData(selectedTicket);
+                const { text, attachments, authorName, authorRole } = parseTicketData(selectedTicket, agentsList);
                 return (
                   <>
                     {/* Top Author Header matching the screenshot */}
