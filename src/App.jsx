@@ -27,6 +27,7 @@ import {
   CheckSquare, Database, Wrench
 } from 'lucide-react';
 import QueryManager from './QueryManager';
+import LoginPage from './LoginPage';
 
 // --- SYSTEM UNDER MAINTENANCE MODE ---
 // Set to true to lock down the site and pause all user interactions during upgrades.
@@ -2083,12 +2084,54 @@ export default function App() {
     return Date.now() < Number(expiry);
   });
 
+  // --- GLOBAL AUTHENTICATION ---
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lextria_user_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [isAdmin, setIsAdmin] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lextria_user_session');
+      const user = saved ? JSON.parse(saved) : null;
+      return user?.role === 'leader';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    setIsAdmin(currentUser?.role === 'leader');
+  }, [currentUser]);
+
+  const handleGlobalLogin = (userData) => {
+    const sessionData = {
+      id: userData.id,
+      name: userData.name,
+      role: userData.role || 'member'
+    };
+    localStorage.setItem('lextria_user_session', JSON.stringify(sessionData));
+    localStorage.setItem('lextria_query_session', JSON.stringify(sessionData));
+    setCurrentUser(sessionData);
+    setIsAdmin(sessionData.role === 'leader');
+  };
+
+  const handleGlobalLogout = () => {
+    localStorage.removeItem('lextria_user_session');
+    localStorage.removeItem('lextria_query_session');
+    setCurrentUser(null);
+    setIsAdmin(false);
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' | 'queries'
   const [priorityFilter, setPriorityFilter] = useState('All');
   const [dueDateFilter, setDueDateFilter] = useState('All');
-  const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
@@ -3646,6 +3689,11 @@ export default function App() {
     }
   }, [activeTaskDetails?.task.id]);
 
+  // --- GLOBAL AUTHENTICATION GATE ---
+  if (!currentUser) {
+    return <LoginPage onLogin={handleGlobalLogin} />;
+  }
+
   return (
     <div className="relative min-h-screen text-slate-100 overflow-x-hidden font-sans">
       {/* System Under Maintenance Lockout */}
@@ -3800,8 +3848,27 @@ export default function App() {
               <span>🕐 {liveDateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
             </div>
 
-            <button onClick={toggleAdmin} className={`p-2.5 rounded-xl transition-all ${isAdmin ? 'bg-brand-500/20 text-brand-300 shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'hover:bg-white/10 text-slate-300'}`} title="Admin Controls">
-              {isAdmin ? <Unlock size={20} /> : <Lock size={20} />}
+            {/* User Profile Badge */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl">
+              <span className="text-xs font-semibold text-white">
+                {currentUser?.name}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
+                isAdmin
+                  ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                  : 'bg-brand-500/20 text-brand-300 border border-brand-500/30'
+              }`}>
+                {currentUser?.role || 'member'}
+              </span>
+            </div>
+
+            {/* Logout Button */}
+            <button 
+              onClick={handleGlobalLogout} 
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 border border-white/10 transition-colors cursor-pointer" 
+              title="Sign out"
+            >
+              Log out
             </button>
           </div>
         </div>
@@ -3876,7 +3943,14 @@ export default function App() {
           <main className={`flex-1 ${activeTab === 'queries' ? 'p-0 flex flex-col min-h-0 overflow-auto' : 'px-6 py-6'}`}>
 
           {/* Queries Page */}
-          {activeTab === 'queries' && <QueryManager agents={allEmployees} isAdmin={isAdmin} />}
+          {activeTab === 'queries' && (
+            <QueryManager 
+              agents={allEmployees} 
+              isAdmin={isAdmin} 
+              currentUser={currentUser}
+              onLogout={handleGlobalLogout}
+            />
+          )}
 
           {activeTab === 'tasks' && (showAnalytics && isAdmin ? (
             <AnalyticsDashboard departments={departments} archivedTasks={archivedTasks} />

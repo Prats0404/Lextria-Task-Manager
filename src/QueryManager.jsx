@@ -22,19 +22,27 @@ const TABS = [
   { id: 'export', label: 'Export' },
 ];
 
-export default function QueryManager({ agents = [], isAdmin = false }) {
+export default function QueryManager({ agents = [], isAdmin = false, currentUser = null, onLogout = null }) {
   const [session, setSession] = useState(() => {
+    if (currentUser) return currentUser;
     try {
-      const saved = localStorage.getItem('lextria_query_session');
+      const saved = localStorage.getItem('lextria_user_session') || localStorage.getItem('lextria_query_session');
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
     }
   });
 
+  // Keep session in sync with currentUser if passed from parent
+  useEffect(() => {
+    if (currentUser) {
+      setSession(currentUser);
+    }
+  }, [currentUser]);
+
   const [activeSubTab, setActiveSubTab] = useState('tickets'); // 'tickets' | 'projects' | 'export' | 'settings'
   
-  // Login form state
+  // Login form state (fallback if rendered standalone)
   const [members, setMembers] = useState([]);
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -42,10 +50,12 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
 
-  // Load members from Supabase
+  // Load members from Supabase for fallback login
   useEffect(() => {
-    fetchMembers();
-  }, []);
+    if (!session) {
+      fetchMembers();
+    }
+  }, [session]);
 
   const fetchMembers = async () => {
     setIsLoadingMembers(true);
@@ -92,6 +102,7 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
       role: member.role || 'member',
     };
 
+    localStorage.setItem('lextria_user_session', JSON.stringify(sessionData));
     localStorage.setItem('lextria_query_session', JSON.stringify(sessionData));
     setSession(sessionData);
     setIsLoggingIn(false);
@@ -119,6 +130,7 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
           name: newLeader.name,
           role: newLeader.role,
         };
+        localStorage.setItem('lextria_user_session', JSON.stringify(sessionData));
         localStorage.setItem('lextria_query_session', JSON.stringify(sessionData));
         setSession(sessionData);
       } else {
@@ -132,21 +144,29 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
   };
 
   const handleLogout = () => {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+    localStorage.removeItem('lextria_user_session');
     localStorage.removeItem('lextria_query_session');
     setSession(null);
     setActiveSubTab('tickets');
     fetchMembers();
   };
 
-  // --- 1. LOGIN SCREEN ---
-  if (!session) {
+  const currentSession = session || currentUser;
+  const isLeader = currentSession?.role === 'leader' || isAdmin;
+
+  // --- 1. FALLBACK LOGIN SCREEN (only if no session anywhere) ---
+  if (!currentSession) {
     return (
       <div className="flex-1 min-h-[85vh] flex items-center justify-center p-4 bg-[#f4f5f7]">
         <div className="w-full max-w-sm">
           <div className="mb-8 text-center flex flex-col items-center">
             <HubLogo size={48} />
             <h1 className="text-2xl font-bold text-slate-900 mt-3">Query Manager</h1>
-            <p className="mt-1 text-sm text-slate-500">Query tickets &amp; project reporting</p>
+            <p className="mt-1 text-sm text-slate-500">Sign in to manage query tickets &amp; reports</p>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -159,7 +179,7 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
                   type="button"
                   onClick={handleSeedLeader}
                   disabled={isLoggingIn}
-                  className="w-full rounded-lg bg-[#16234f] hover:bg-[#1f3169] px-4 py-2.5 text-sm font-semibold text-white transition shadow-sm"
+                  className="w-full rounded-lg bg-[#16234f] hover:bg-[#1f3169] px-4 py-2.5 text-sm font-semibold text-white transition shadow-sm cursor-pointer"
                 >
                   {isLoggingIn ? 'Setting up…' : 'Initialize as Pranav Bhat (Leader)'}
                 </button>
@@ -204,7 +224,7 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
                 <button
                   type="submit"
                   disabled={isLoggingIn || !selectedMemberId}
-                  className="w-full rounded-lg bg-[#16234f] hover:bg-[#1f3169] px-3 py-2.5 text-sm font-semibold text-white transition shadow-sm disabled:opacity-50"
+                  className="w-full rounded-lg bg-[#16234f] hover:bg-[#1f3169] px-3 py-2.5 text-sm font-semibold text-white transition shadow-sm disabled:opacity-50 cursor-pointer"
                 >
                   {isLoggingIn ? 'Signing in…' : 'Sign in'}
                 </button>
@@ -230,7 +250,7 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
                 <button
                   key={tab.id}
                   onClick={() => setActiveSubTab(tab.id)}
-                  className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-semibold transition ${
+                  className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-semibold transition cursor-pointer ${
                     active
                       ? 'bg-[#c9a227] text-[#16234f] shadow-sm'
                       : 'text-slate-200 hover:bg-white/10'
@@ -240,10 +260,10 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
                 </button>
               );
             })}
-            {session.role === 'leader' && (
+            {isLeader && (
               <button
                 onClick={() => setActiveSubTab('settings')}
-                className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-semibold transition ${
+                className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-semibold transition cursor-pointer ${
                   activeSubTab === 'settings'
                     ? 'bg-[#c9a227] text-[#16234f] shadow-sm'
                     : 'text-slate-200 hover:bg-white/10'
@@ -257,14 +277,14 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
           {/* User badge & Logout */}
           <div className="flex shrink-0 items-center gap-3">
             <span className="hidden sm:inline text-sm text-slate-200">
-              {session.name}{' '}
+              {currentSession.name}{' '}
               <span className="ml-1 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium capitalize text-[#e6c766]">
-                {session.role}
+                {currentSession.role || 'member'}
               </span>
             </span>
             <button
               onClick={handleLogout}
-              className="shrink-0 rounded-lg border border-white/25 px-2.5 py-1 text-xs font-medium text-slate-100 hover:bg-white/10 transition-colors"
+              className="shrink-0 rounded-lg border border-white/25 px-2.5 py-1 text-xs font-medium text-slate-100 hover:bg-white/10 transition-colors cursor-pointer"
             >
               Log out
             </button>
@@ -275,16 +295,16 @@ export default function QueryManager({ agents = [], isAdmin = false }) {
       {/* Sub-Page Content */}
       <div className="flex-1 flex flex-col min-h-0 overflow-auto">
         {activeSubTab === 'tickets' && (
-          <QueryTickets session={session} />
+          <QueryTickets session={currentSession} />
         )}
         {activeSubTab === 'projects' && (
-          <ProjectReporting session={session} isAdmin={session.role === 'leader'} />
+          <ProjectReporting session={currentSession} isAdmin={isLeader} />
         )}
         {activeSubTab === 'export' && (
           <ExportPage />
         )}
-        {activeSubTab === 'settings' && (
-          <SettingsPage isAdmin={session.role === 'leader'} currentUser={session} />
+        {activeSubTab === 'settings' && isLeader && (
+          <SettingsPage isAdmin={isLeader} currentUser={currentSession} />
         )}
       </div>
     </div>
