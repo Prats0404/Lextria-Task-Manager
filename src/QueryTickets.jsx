@@ -377,24 +377,63 @@ export default function QueryTickets({ session, agents = [] }) {
     return 'bg-emerald-100 text-emerald-700 border-emerald-200';
   };
 
+  const getBoardCounts = (boardKey, boardLabel) => {
+    const matchingTickets = tickets.filter(t => {
+      if (!t.board) return false;
+      const b = t.board.toLowerCase();
+      const curr = boardLabel.toLowerCase();
+      const key = boardKey.toLowerCase();
+      return b === curr || b === key || (key === 'misc' && (b === 'misc' || b === 'miscellaneous'));
+    });
+
+    const unresolved = matchingTickets.filter(t => (t.status || '').toLowerCase() !== 'resolved').length;
+    const openCount = matchingTickets.filter(t => (t.status || '').toLowerCase() === 'open').length;
+
+    return { unresolved, openCount };
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#f4f5f7] text-slate-800">
       {/* Board Category Pills */}
       <div className="px-6 pt-5 pb-1">
         <div className="flex items-center gap-2 flex-wrap">
-          {BOARDS.map(b => (
-            <button
-              key={b.key}
-              onClick={() => setSelectedBoardKey(b.key)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
-                selectedBoardKey === b.key
-                  ? 'bg-[#16234f] text-white border-[#16234f]'
-                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {b.label}
-            </button>
-          ))}
+          {BOARDS.map(b => {
+            const c = getBoardCounts(b.key, b.label);
+            const isSelected = selectedBoardKey === b.key;
+            return (
+              <button
+                key={b.key}
+                onClick={() => setSelectedBoardKey(b.key)}
+                className={`relative inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium border transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-[#16234f] text-white border-[#16234f] shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <span>{b.label}</span>
+                {c.unresolved > 0 && (
+                  <span className="inline-flex items-center gap-1 ml-0.5">
+                    {/* Gray badge: Total active / unresolved tickets */}
+                    <span 
+                      title={`${c.unresolved} active tickets`}
+                      className="inline-flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-slate-400 text-white text-[10px] font-bold"
+                    >
+                      {c.unresolved}
+                    </span>
+                    {/* Red badge: Open tickets needing attention */}
+                    {c.openCount > 0 && (
+                      <span 
+                        title={`${c.openCount} open tickets`}
+                        className="inline-flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold"
+                      >
+                        {c.openCount}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
