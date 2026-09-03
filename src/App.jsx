@@ -2569,11 +2569,11 @@ export default function App() {
 
     // Auto-archive past completed tasks with robust batching
     allTasks.forEach(t => {
-      const createdDate = t.created_at ? t.created_at.split('T')[0] : '';
-      const compDate = (t.custom_completed_at ? t.custom_completed_at.split('T')[0] : null) || t.completed_date || createdDate;
+      // Only check real completion date — NEVER fall back to createdDate, which would archive newly-completed old tasks!
+      const compDate = (t.custom_completed_at ? t.custom_completed_at.split('T')[0] : null) || t.completed_date;
 
       if (t.completed && !t.is_archived) {
-        // If task was completed on a previous day (or created on a previous day and is completed), archive it
+        // Only archive if explicitly completed on a previous day
         if (compDate && compDate < today) {
           t.is_archived = true;
           tasksToArchive.push(t.id);
@@ -3216,6 +3216,7 @@ export default function App() {
         dbUpdates.custom_completed_at = preserveCustomAt;
       } else {
         dbUpdates.completed_date = null;
+        dbUpdates.custom_completed_at = null;
         dbUpdates.is_archived = false;
       }
       dbUpdates.timer_started_at = null;
@@ -3280,6 +3281,7 @@ export default function App() {
   };
 
   const deleteTask = async (empId, taskId) => {
+    lastLocalActionTimeRef.current = Date.now();
     // Optimistic
     setDepartments(prev => prev.map(d => ({
       ...d,
@@ -3296,6 +3298,7 @@ export default function App() {
   // --- DRAG AND DROP HANDLERS ---
   const handleDragStart = (event) => {
     const { active } = event;
+    lastLocalActionTimeRef.current = Date.now();
     setActiveDragItem(active.data.current);
   };
 
@@ -3313,6 +3316,8 @@ export default function App() {
       const overEmpId = overData.type === 'Task' ? overData.employeeId : overData.type === 'Employee' ? overData.employee.id : null;
       
       if (!overEmpId || activeEmpId === overEmpId) return;
+
+      lastLocalActionTimeRef.current = Date.now();
 
       setDepartments(prev => {
         const next = JSON.parse(JSON.stringify(prev));
@@ -3338,10 +3343,6 @@ export default function App() {
         }
         
         active.data.current.employeeId = overEmpId;
-        
-        // Supabase async update (fire and forget)
-        supabase.from('tasks').update({ agent_id: overEmpId }).eq('id', task.id).then();
-        
         return next;
       });
     }
@@ -3349,32 +3350,69 @@ export default function App() {
 
   const handleDragEnd = (event) => {
     setActiveDragItem(null);
+    lastLocalActionTimeRef.current = Date.now();
     const { active, over } = event;
     if (!over) return;
 
     const activeData = active.data.current;
     const overData = over.data.current;
 
-    if (activeData.type === 'Task' && overData.type === 'Task' && activeData.employeeId === overData.employeeId) {
-      if (active.id !== over.id) {
-        setDepartments(prev => {
-          const next = JSON.parse(JSON.stringify(prev));
-          const dept = next.find(d => d.id === selectedDeptId);
-          const board = dept.boards.find(b => b.id === selectedBoardId);
-          let emp = board.employees.find(e => e.id === activeData.employeeId);
-          const oldIndex = emp.tasks.findIndex(t => t.id === active.id);
-          const newIndex = emp.tasks.findIndex(t => t.id === over.id);
-          const updatedTasks = arrayMove(emp.tasks, oldIndex, newIndex);
-          emp.tasks = updatedTasks;
+    if (activeData?.type === 'Task') {
+      const taskId = active.id;
 
-          // Asynchronously update positions in Supabase
-          updatedTasks.forEach((t, index) => {
-            supabase.from('tasks').update({ position: index }).eq('id', t.id).then();
+      if (overData?.type === 'Task' && activeData.employeeId === overData.employeeId) {
+        if (active.id !== over.id) {
+          setDepartments(prev => {
+            const next = JSON.parse(JSON.stringify(prev));
+            const dept = next.find(d => d.id === selectedDeptId);
+            const board = dept?.boards.find(b => b.id === selectedBoardId);
+            let emp = board?.employees.find(e => e.id === activeData.employeeId);
+            if (emp) {
+              const oldIndex = emp.tasks.findIndex(t => t.id === active.id);
+              const newIndex = emp.tasks.findIndex(t => t.id === over.id);
+              const updatedTasks = arrayMove(emp.tasks, oldIndex, newIndex);
+              emp.tasks = updatedTasks;
+
+              // Asynchronously update positions in Supabase
+              updatedTasks.forEach((t, index) => {
+                supabase.from('tasks').update({ position: index }).eq('id', t.id).then();
+              });
+            }
+            return next;
+          });
+        }
+      }
+
+      // Persist the final agent_id and position to Supabase
+      setTimeout(() => {
+        setDepartments(currentDepts => {
+          let targetEmpId = null;
+          let targetIndex = 0;
+
+          currentDepts.forEach(d => {
+            d.boards?.forEach(b => {
+              b.employees?.forEach(e => {
+                const idx = e.tasks?.findIndex(t => t.id === taskId);
+                if (idx !== -1 && idx !== undefined) {
+                  targetEmpId = e.id;
+                  targetIndex = idx;
+                }
+              });
+            });
           });
 
-          return next;
+          if (targetEmpId) {
+            supabase.from('tasks').update({ 
+              agent_id: targetEmpId, 
+              position: targetIndex 
+            }).eq('id', taskId).then(({ error }) => {
+              if (error) console.error('Error saving dragged task to Supabase:', error);
+            });
+          }
+
+          return currentDepts;
         });
-      }
+      }, 50);
     }
 
     if (activeData.type === 'Employee' && overData.type === 'Employee') {
@@ -3718,21 +3756,21 @@ export default function App() {
       <div className="bg-orb bg-brand-400/20 w-[600px] h-[600px] top-[40%] left-[30%]" style={{ animationDelay: '-10s' }} />
 
       {/* Navbar */}
-      <nav className="glass-card rounded-none border-t-0 border-x-0 border-b-white/10 px-6 py-4 sticky top-0 z-40 backdrop-blur-2xl bg-[#0a0a1a]/70">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center space-x-3 whitespace-nowrap">
+      <nav className="glass-card rounded-none border-t-0 border-x-0 border-b-white/10 px-4 lg:px-6 py-3 sticky top-0 z-40 backdrop-blur-2xl bg-[#0a0a1a]/80">
+        <div className="w-full flex items-center justify-between gap-4">
+          <div className="flex items-center space-x-3 shrink-0">
             <img 
               src="/logo.png" 
               alt="Lextria Logo" 
-              className="w-12 h-12 rounded-full object-cover shadow-lg border border-white/15"
+              className="w-10 h-10 rounded-full object-cover shadow-lg border border-white/15 shrink-0"
             />
-            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 whitespace-nowrap">
               Lextria Task & Query Manager
             </h1>
           </div>
 
           {/* Global Search Bar */}
-          <div className="relative w-full max-w-md hidden lg:block z-50">
+          <div className="relative flex-1 max-w-xs xl:max-w-sm hidden md:block z-50">
             <div className="relative group">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-400 transition-colors pointer-events-none" size={17} />
               <input 
