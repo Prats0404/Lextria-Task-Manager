@@ -26,6 +26,7 @@ import {
   Bell, Calendar, X, Lock, Unlock, AlertCircle, GripVertical, GripHorizontal, Building2, Layout, Users, ChevronRight, ChevronLeft, ArrowLeft, History, RotateCcw, Tag, BarChart3, Filter, SlidersHorizontal, Image, UploadCloud, Link, Clock, Download, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
   CheckSquare, Database, Wrench
 } from 'lucide-react';
+import QueryManager from './QueryManager';
 
 // --- SYSTEM UNDER MAINTENANCE MODE ---
 // Set to true to lock down the site and pause all user interactions during upgrades.
@@ -2036,27 +2037,6 @@ function SplashScreen({ onFinished }) {
   );
 }
 
-// --- QUERIES PAGE PLACEHOLDER ---
-function QueriesPage() {
-  return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
-      <div className="glass-card p-12 rounded-2xl border border-white/10 max-w-md w-full flex flex-col items-center gap-6">
-        <div className="w-20 h-20 rounded-2xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center shadow-[0_0_30px_rgba(37,99,235,0.2)]">
-          <Database size={40} className="text-brand-400" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-white mb-2">Queries</h2>
-          <p className="text-slate-400 text-sm leading-relaxed">
-            The Queries section is coming soon. This area will allow you to run custom queries, filters, and reports across your task data.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-accent-500/10 border border-accent-500/20 text-accent-400 text-xs font-semibold tracking-wide uppercase">
-          🚧 Under Construction
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function App() {
   const [departments, setDepartments] = useState([]);
@@ -3896,7 +3876,7 @@ export default function App() {
           <main className="flex-1 px-6 py-6">
 
           {/* Queries Page */}
-          {activeTab === 'queries' && <QueriesPage />}
+          {activeTab === 'queries' && <QueryManager agents={allEmployees} />}
 
           {activeTab === 'tasks' && (showAnalytics && isAdmin ? (
             <AnalyticsDashboard departments={departments} archivedTasks={archivedTasks} />
