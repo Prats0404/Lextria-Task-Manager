@@ -15,6 +15,7 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
   const [activeTab, setActiveTab] = useState('Board'); // 'Board' | 'History'
   const [urgencyFilter, setUrgencyFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [agentsList, setAgentsList] = useState(agents);
   
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [newProject, setNewProject] = useState({ client: '', title: '', description: '', urgency: 'Medium' });
@@ -25,7 +26,18 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
 
   useEffect(() => {
     fetchProjects();
+    supabase.from('agents').select('id, name').then(({ data }) => {
+      if (data && data.length > 0) setAgentsList(data);
+    });
   }, []);
+
+  const resolveAgentId = (userName) => {
+    if (!userName) return null;
+    const clean = userName.replace(/\s+/g, '').toLowerCase();
+    const list = agentsList.length > 0 ? agentsList : agents;
+    const found = list.find(a => a.name?.replace(/\s+/g, '').toLowerCase() === clean);
+    return found ? found.id : null;
+  };
 
   const fetchProjects = async () => {
     const { data, error } = await supabase
@@ -56,17 +68,20 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
 
   const handleCreateProject = async () => {
     if (!newProject.title || !newProject.client) return;
+    const agentId = resolveAgentId(session?.name);
+
     const { data, error } = await supabase.from('projects').insert([{
       title: newProject.title,
       client: newProject.client,
       description: newProject.description,
       urgency: newProject.urgency,
-      created_by: session?.id || null,
+      created_by: agentId,
       status: 'Not Started'
     }]).select();
     
     if (error) {
       console.error('Error creating project:', error);
+      alert('Error creating project: ' + (error.message || 'Please check connection.'));
     } else {
       setProjects([data[0], ...projects]);
       if (!clients.includes(newProject.client)) {
@@ -94,17 +109,22 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
   const postUpdate = async () => {
     if (!newUpdate.trim() || !selectedProject) return;
     
-    const agentId = session?.id || (agents.length > 0 ? agents[0].id : null); 
+    const agentId = resolveAgentId(session?.name);
+    const authorName = session?.name || 'Member';
+    const contentWithAuthor = `[${authorName}]: ${newUpdate.trim()}`;
     
     const { data, error } = await supabase.from('project_updates').insert([{
       project_id: selectedProject.id,
       agent_id: agentId,
-      content: newUpdate
+      content: contentWithAuthor
     }]).select();
     
     if (!error && data) {
       setUpdates([...updates, data[0]]);
       setNewUpdate('');
+    } else if (error) {
+      console.error('Error posting update:', error);
+      alert('Error posting update: ' + (error.message || 'Please check connection.'));
     }
   };
 
@@ -426,8 +446,18 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
                   <div className="text-center text-gray-500 py-10">No updates yet. Start the conversation!</div>
                 ) : (
                   updates.map(update => {
-                    const agent = agents.find(a => a.id === update.agent_id);
-                    const agentName = agent ? agent.name : 'Unknown Agent';
+                    let agentName = 'Team Member';
+                    let content = update.content;
+                    if (content && content.startsWith('[') && content.includes(']: ')) {
+                      const closing = content.indexOf(']: ');
+                      agentName = content.substring(1, closing);
+                      content = content.substring(closing + 3);
+                    } else if (update.agent_id) {
+                      const list = agentsList.length > 0 ? agentsList : agents;
+                      const agent = list.find(a => a.id === update.agent_id);
+                      if (agent) agentName = agent.name;
+                    }
+
                     return (
                       <div key={update.id} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                         <div className="flex justify-between items-start mb-2">
@@ -438,9 +468,9 @@ export default function ProjectReporting({ agents = [], isAdmin = false, session
                             {new Date(update.created_at).toLocaleString()}
                           </span>
                         </div>
-                        <p className="text-gray-700 text-sm whitespace-pre-wrap">{update.content}</p>
+                        <p className="text-gray-700 text-sm whitespace-pre-wrap">{content}</p>
                       </div>
-                    )
+                    );
                   })
                 )}
               </div>

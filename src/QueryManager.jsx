@@ -295,10 +295,10 @@ export default function QueryManager({ agents = [], isAdmin = false, currentUser
       {/* Sub-Page Content */}
       <div className="flex-1 flex flex-col min-h-0 overflow-auto">
         {activeSubTab === 'tickets' && (
-          <QueryTickets session={currentSession} />
+          <QueryTickets session={currentSession} agents={agents} />
         )}
         {activeSubTab === 'projects' && (
-          <ProjectReporting session={currentSession} isAdmin={isLeader} />
+          <ProjectReporting session={currentSession} isAdmin={isLeader} agents={agents} />
         )}
         {activeSubTab === 'export' && (
           <ExportPage />

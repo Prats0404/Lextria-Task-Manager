@@ -16,11 +16,12 @@ const BOARDS = [
 
 const URGENCIES = ['High', 'Medium', 'Low'];
 
-export default function QueryTickets({ session }) {
+export default function QueryTickets({ session, agents = [] }) {
   const [selectedBoardKey, setSelectedBoardKey] = useState('litigation');
   const [activeView, setActiveView] = useState('board'); // 'board' | 'history'
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [agentsList, setAgentsList] = useState(agents);
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -38,7 +39,37 @@ export default function QueryTickets({ session }) {
 
   useEffect(() => {
     fetchTickets();
+    supabase.from('agents').select('id, name').then(({ data }) => {
+      if (data && data.length > 0) {
+        setAgentsList(data);
+      }
+    });
   }, []);
+
+  const resolveAgentId = (userName) => {
+    if (!userName) return null;
+    const clean = userName.replace(/\s+/g, '').toLowerCase();
+    const list = agentsList.length > 0 ? agentsList : agents;
+    const found = list.find(a => a.name?.replace(/\s+/g, '').toLowerCase() === clean);
+    return found ? found.id : null;
+  };
+
+  const parseTicketQuery = (rawQuery) => {
+    if (!rawQuery) return { text: '', attachments: [] };
+    const marker = '\n\n[ATTACHMENTS]:';
+    const idx = rawQuery.indexOf(marker);
+    if (idx !== -1) {
+      const text = rawQuery.substring(0, idx).trim();
+      const jsonStr = rawQuery.substring(idx + marker.length);
+      try {
+        const attachments = JSON.parse(jsonStr);
+        return { text, attachments: Array.isArray(attachments) ? attachments : [] };
+      } catch {
+        return { text, attachments: [] };
+      }
+    }
+    return { text: rawQuery, attachments: [] };
+  };
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -74,18 +105,21 @@ export default function QueryTickets({ session }) {
     if (!queryText.trim()) return;
     setSubmitting(true);
 
-    const userName = session?.name || 'Member';
-    const userRole = session?.role || 'member';
+    const agentId = resolveAgentId(session?.name);
+
+    let fullQuery = queryText.trim();
+    if (images.length > 0) {
+      fullQuery += '\n\n[ATTACHMENTS]:' + JSON.stringify(images);
+    }
 
     const { data, error } = await supabase
       .from('tickets')
       .insert([{
         board: currentBoard.label,
         urgency: urgency,
-        query: queryText.trim(),
-        created_by: session?.id || null,
-        status: 'Open',
-        images: images.length > 0 ? JSON.stringify(images) : null
+        query: fullQuery,
+        created_by: agentId,
+        status: 'Open'
       }])
       .select();
 
@@ -93,7 +127,7 @@ export default function QueryTickets({ session }) {
 
     if (error) {
       console.error('Error creating ticket:', error);
-      alert('Could not create ticket. Please check Supabase connection.');
+      alert('Could not create ticket: ' + (error.message || 'Please check Supabase connection.'));
     } else {
       setShowNewModal(false);
       setQueryText('');
@@ -123,19 +157,21 @@ export default function QueryTickets({ session }) {
     e.preventDefault();
     if (!newMessage.trim() || !selectedTicket) return;
 
-    const authorName = session?.name || 'Anonymous';
-    const authorRole = session?.role || 'member';
+    const agentId = resolveAgentId(session?.name);
+    const authorName = session?.name || 'Member';
+    const contentWithAuthor = `[${authorName}]: ${newMessage.trim()}`;
 
     const { error } = await supabase
       .from('messages')
       .insert([{
         ticket_id: selectedTicket.id,
-        content: newMessage.trim(),
-        agent_id: session?.id || null
+        content: contentWithAuthor,
+        agent_id: agentId
       }]);
 
     if (error) {
       console.error('Error sending message:', error);
+      alert('Error sending message: ' + (error.message || 'Please check connection.'));
     } else {
       setNewMessage('');
       fetchMessages(selectedTicket.id);
@@ -429,7 +465,34 @@ export default function QueryTickets({ session }) {
               </div>
 
               <div className="bg-white border border-slate-200 rounded-lg p-4 mb-5">
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{selectedTicket.query}</p>
+                {(() => {
+                  const { text, attachments } = parseTicketQuery(selectedTicket.query);
+                  return (
+                    <div>
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{text}</p>
+                      {attachments.length > 0 && (
+                        <div className="mt-4 pt-3 border-t border-slate-100">
+                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">
+                            Attached Images ({attachments.length})
+                          </span>
+                          <div className="grid grid-cols-2 gap-2">
+                            {attachments.map((att, idx) => (
+                              <a 
+                                key={idx} 
+                                href={att.preview} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="block rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition shadow-xs group"
+                              >
+                                <img src={att.preview} alt={att.name || 'Attachment'} className="w-full h-24 object-cover" />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="mt-auto pt-4">
@@ -438,7 +501,7 @@ export default function QueryTickets({ session }) {
                   {selectedTicket.status !== 'Open' && (
                     <button 
                       onClick={() => updateTicketStatus(selectedTicket.id, 'Open')} 
-                      className="w-full py-2 text-sm rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium transition-colors"
+                      className="w-full py-2 text-sm rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium transition-colors cursor-pointer"
                     >
                       Move to Open
                     </button>
@@ -446,7 +509,7 @@ export default function QueryTickets({ session }) {
                   {selectedTicket.status !== 'In Discussion' && (
                     <button 
                       onClick={() => updateTicketStatus(selectedTicket.id, 'In Discussion')} 
-                      className="w-full py-2 text-sm rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium transition-colors"
+                      className="w-full py-2 text-sm rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium transition-colors cursor-pointer"
                     >
                       Move to Discussion
                     </button>
@@ -454,7 +517,7 @@ export default function QueryTickets({ session }) {
                   {selectedTicket.status !== 'Resolved' && (
                     <button 
                       onClick={() => updateTicketStatus(selectedTicket.id, 'Resolved')} 
-                      className="w-full py-2 text-sm rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium transition-colors"
+                      className="w-full py-2 text-sm rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium transition-colors cursor-pointer"
                     >
                       Mark as Resolved
                     </button>
@@ -486,15 +549,31 @@ export default function QueryTickets({ session }) {
                   </div>
                 ) : (
                   messages.map(msg => {
-                    const isOwn = msg.agent_id === session?.id;
+                    let author = 'Member';
+                    let body = msg.content;
+                    if (body && body.startsWith('[') && body.includes(']: ')) {
+                      const closing = body.indexOf(']: ');
+                      author = body.substring(1, closing);
+                      body = body.substring(closing + 3);
+                    } else if (msg.agent_id) {
+                      const found = agentsList.find(a => a.id === msg.agent_id);
+                      if (found) author = found.name;
+                    }
+
+                    const isOwn = (session?.name && author.toLowerCase() === session.name.toLowerCase()) ||
+                                  (session?.name && session.name.replace(/\s+/g,'').toLowerCase() === author.replace(/\s+/g,'').toLowerCase());
+
                     return (
                       <div key={msg.id} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
+                        <span className="text-[11px] font-semibold text-slate-500 mb-0.5 px-1">
+                          {author} {isOwn && '(You)'}
+                        </span>
                         <div className={`px-4 py-2.5 rounded-2xl max-w-[80%] text-sm ${
                           isOwn 
                             ? 'bg-[#16234f] text-white rounded-br-sm' 
-                            : 'bg-white text-slate-700 border border-slate-200 rounded-bl-sm shadow-sm'
+                            : 'bg-white text-slate-800 border border-slate-200 rounded-bl-sm shadow-sm'
                         }`}>
-                          {msg.content}
+                          {body}
                         </div>
                         <span className="text-[10px] text-slate-400 mt-1 px-1">
                           {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -537,6 +616,12 @@ export default function QueryTickets({ session }) {
 }
 
 function TicketCardItem({ ticket, onClick, urgencyBadge }) {
+  const marker = '\n\n[ATTACHMENTS]:';
+  const rawQuery = ticket.query || '';
+  const idx = rawQuery.indexOf(marker);
+  const displayText = idx !== -1 ? rawQuery.substring(0, idx).trim() : rawQuery;
+  const hasAttachments = idx !== -1;
+
   return (
     <div 
       onClick={onClick}
@@ -552,8 +637,14 @@ function TicketCardItem({ ticket, onClick, urgencyBadge }) {
       </div>
       
       <p className="text-sm text-slate-800 line-clamp-3 mb-2 leading-relaxed">
-        {ticket.query}
+        {displayText}
       </p>
+
+      {hasAttachments && (
+        <span className="inline-flex items-center gap-1 text-[11px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md mb-2 font-medium border border-blue-200">
+          📷 Image attached
+        </span>
+      )}
       
       <div className="flex justify-between items-center text-xs text-slate-400 pt-2 border-t border-slate-100">
         <span className="flex items-center gap-1 font-medium text-slate-500 truncate">
