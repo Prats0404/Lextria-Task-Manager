@@ -3876,7 +3876,7 @@ export default function App() {
           <main className="flex-1 px-6 py-6">
 
           {/* Queries Page */}
-          {activeTab === 'queries' && <QueryManager agents={allEmployees} />}
+          {activeTab === 'queries' && <QueryManager agents={allEmployees} isAdmin={isAdmin} />}
 
           {activeTab === 'tasks' && (showAnalytics && isAdmin ? (
             <AnalyticsDashboard departments={departments} archivedTasks={archivedTasks} />

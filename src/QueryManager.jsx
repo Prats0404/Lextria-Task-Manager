@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { 
-  Plus, Clock, MessageSquare, X, Send, User, Calendar, ChevronDown
+  Plus, Clock, MessageSquare, X, Send, User, Calendar, Image as ImageIcon
 } from 'lucide-react';
 
 const BOARDS = ['Litigation', 'Compliance', 'Miscellaneous', 'Patent', 'Trademark', 'Copyright', 'Design'];
 const URGENCIES = ['High', 'Medium', 'Low'];
 
-export default function QueryManager({ agents = [] }) {
+export default function QueryManager({ agents = [], isAdmin = false }) {
   const [activeView, setActiveView] = useState('board'); // 'board' | 'history'
   const [selectedBoard, setSelectedBoard] = useState('Litigation');
   const [tickets, setTickets] = useState([]);
@@ -19,19 +19,18 @@ export default function QueryManager({ agents = [] }) {
   const [newMessage, setNewMessage] = useState('');
 
   // Form state
-  const [newTicket, setNewTicket] = useState({
-    board: 'Litigation',
-    urgency: 'Medium',
-    query: '',
-    created_by: agents.length > 0 ? agents[0].id : null
-  });
+  const [newTicketUrgency, setNewTicketUrgency] = useState('Medium');
+  const [newTicketQuery, setNewTicketQuery] = useState('');
+  const [newTicketCreatedBy, setNewTicketCreatedBy] = useState(agents.length > 0 ? agents[0].id : null);
+  const [newTicketImages, setNewTicketImages] = useState([]);
+  const fileInputRef = useRef(null);
 
   // Update default agent if agents load late
   useEffect(() => {
-    if (agents.length > 0 && !newTicket.created_by) {
-      setNewTicket(prev => ({ ...prev, created_by: agents[0].id }));
+    if (agents.length > 0 && !newTicketCreatedBy) {
+      setNewTicketCreatedBy(agents[0].id);
     }
-  }, [agents, newTicket.created_by]);
+  }, [agents, newTicketCreatedBy]);
 
   useEffect(() => {
     fetchTickets();
@@ -68,15 +67,18 @@ export default function QueryManager({ agents = [] }) {
 
   const handleCreateTicket = async (e) => {
     e.preventDefault();
-    if (!newTicket.query.trim()) return;
+    if (!newTicketQuery.trim()) return;
+
+    // Map board name for DB (Miscellaneous -> Misc)
+    const dbBoard = selectedBoard === 'Miscellaneous' ? 'Misc' : selectedBoard;
 
     const { data, error } = await supabase
       .from('tickets')
       .insert([{
-        board: newTicket.board,
-        urgency: newTicket.urgency,
-        query: newTicket.query,
-        created_by: newTicket.created_by,
+        board: dbBoard,
+        urgency: newTicketUrgency,
+        query: newTicketQuery,
+        created_by: newTicketCreatedBy,
         status: 'Open'
       }])
       .select();
@@ -86,7 +88,9 @@ export default function QueryManager({ agents = [] }) {
       alert('Failed to create ticket.');
     } else {
       setShowNewTicketModal(false);
-      setNewTicket({ ...newTicket, query: '' });
+      setNewTicketQuery('');
+      setNewTicketUrgency('Medium');
+      setNewTicketImages([]);
       fetchTickets();
     }
   };
@@ -138,8 +142,29 @@ export default function QueryManager({ agents = [] }) {
     return agent ? agent.name : 'Unknown';
   };
 
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setNewTicketImages(prev => [...prev, { name: file.name, preview: ev.target.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index) => {
+    setNewTicketImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Determine the current user's name for "Raising as"
+  const currentUserName = agents.length > 0 ? getAgentName(newTicketCreatedBy) : 'Unknown';
+
   // Filter tickets by selected board
-  const boardTickets = tickets.filter(t => t.board === selectedBoard || t.board === 'Misc' && selectedBoard === 'Miscellaneous');
+  const boardTickets = tickets.filter(t => {
+    if (selectedBoard === 'Miscellaneous') return t.board === 'Misc' || t.board === 'Miscellaneous';
+    return t.board === selectedBoard;
+  });
   const openTickets = boardTickets.filter(t => t.status === 'Open');
   const discussingTickets = boardTickets.filter(t => t.status === 'In Discussion');
   const resolvedTickets = boardTickets.filter(t => t.status === 'Resolved');
@@ -198,10 +223,7 @@ export default function QueryManager({ agents = [] }) {
         </div>
 
         <button 
-          onClick={() => {
-            setNewTicket(prev => ({ ...prev, board: selectedBoard === 'Miscellaneous' ? 'Misc' : selectedBoard }));
-            setShowNewTicketModal(true);
-          }}
+          onClick={() => setShowNewTicketModal(true)}
           className="flex items-center gap-1.5 bg-[#1e3a5f] hover:bg-[#162d4a] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           <Plus size={16} /> New query
@@ -273,72 +295,124 @@ export default function QueryManager({ agents = [] }) {
         )}
       </div>
 
-      {/* New Ticket Modal */}
+      {/* ===== NEW QUERY MODAL (matches prototype screenshot) ===== */}
       {showNewTicketModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 relative">
-            <button onClick={() => setShowNewTicketModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
-            <h2 className="text-lg font-bold mb-5 text-gray-900 flex items-center gap-2">
-              <Plus size={20} className="text-[#1e3a5f]"/> Create New Query
-            </h2>
-            
-            <form onSubmit={handleCreateTicket} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Board / Category</label>
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl relative">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-0">
+              <h2 className="text-lg font-bold text-[#1e3a5f]">
+                New query · {selectedBoard}
+              </h2>
+              <button onClick={() => { setShowNewTicketModal(false); setNewTicketImages([]); }} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X size={22} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTicket} className="px-6 pb-6 pt-4">
+              {/* Raising as */}
+              <div className="mb-5">
+                <span className="text-sm text-[#1e3a5f]/70">Raising as </span>
+                <span className="text-sm font-semibold text-[#1e3a5f]">{currentUserName}</span>
+                {/* Hidden: allow leader to pick a different agent */}
+                {isAdmin && agents.length > 1 && (
                   <select 
-                    value={newTicket.board} 
-                    onChange={e => setNewTicket({...newTicket, board: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1e3a5f]/30 focus:border-[#1e3a5f] outline-none bg-white"
+                    value={newTicketCreatedBy || ''} 
+                    onChange={e => setNewTicketCreatedBy(e.target.value)}
+                    className="ml-2 text-sm border border-gray-300 rounded px-2 py-0.5 outline-none focus:border-[#1e3a5f]"
                   >
-                    {BOARDS.map(b => <option key={b} value={b === 'Miscellaneous' ? 'Misc' : b}>{b}</option>)}
+                    {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Urgency</label>
+                )}
+              </div>
+
+              {/* Urgency */}
+              <div className="mb-5">
+                <label className="block text-sm font-semibold text-gray-800 mb-1.5">Urgency</label>
+                <div className="relative">
                   <select 
-                    value={newTicket.urgency} 
-                    onChange={e => setNewTicket({...newTicket, urgency: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1e3a5f]/30 focus:border-[#1e3a5f] outline-none bg-white"
+                    value={newTicketUrgency} 
+                    onChange={e => setNewTicketUrgency(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm appearance-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] outline-none bg-white pr-8"
                   >
                     {URGENCIES.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
+                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M6 8L1 3h10z"/></svg>
+                  </div>
                 </div>
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Created By</label>
-                <select 
-                  value={newTicket.created_by || ''} 
-                  onChange={e => setNewTicket({...newTicket, created_by: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1e3a5f]/30 focus:border-[#1e3a5f] outline-none bg-white"
-                >
-                  {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Query Description</label>
+              {/* Query */}
+              <div className="mb-5">
+                <label className="block text-sm font-semibold text-gray-800 mb-1.5">Query</label>
                 <textarea 
-                  value={newTicket.query} 
-                  onChange={e => setNewTicket({...newTicket, query: e.target.value})}
+                  value={newTicketQuery} 
+                  onChange={e => setNewTicketQuery(e.target.value)}
                   required 
-                  rows={4}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-[#1e3a5f]/30 focus:border-[#1e3a5f] outline-none" 
-                  placeholder="Describe your issue or query here..." 
+                  rows={5}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm resize-y focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] outline-none" 
+                  placeholder="Describe what you need from the leader... (links are auto-detected)" 
                 />
               </div>
 
-              <div className="pt-2 flex justify-end space-x-3">
-                <button type="button" onClick={() => setShowNewTicketModal(false)} className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100 text-sm transition-colors">Cancel</button>
-                <button type="submit" className="px-5 py-2 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-sm font-medium transition-colors">Submit Query</button>
+              {/* Attach images */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-800 mb-1.5">Attach images (optional)</label>
+                <div className="flex items-start gap-3 flex-wrap">
+                  {newTicketImages.map((img, i) => (
+                    <div key={i} className="relative w-20 h-20 rounded-lg border border-gray-200 overflow-hidden group">
+                      <img src={img.preview} alt={img.name} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(i)}
+                        className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 hover:border-[#1e3a5f]/40 flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-[#1e3a5f] transition-colors"
+                  >
+                    <Plus size={18} />
+                    <span className="text-[11px] font-medium">Image</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end items-center gap-3 pt-2 border-t border-gray-100">
+                <button 
+                  type="button" 
+                  onClick={() => { setShowNewTicketModal(false); setNewTicketImages([]); }} 
+                  className="px-5 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-medium transition-colors border border-gray-300"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-5 py-2.5 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-sm font-medium transition-colors"
+                >
+                  Raise ticket
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Ticket Details / Chat Modal */}
+      {/* ===== TICKET DETAILS / CHAT MODAL ===== */}
       {selectedTicket && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-4xl h-[80vh] flex flex-col md:flex-row rounded-2xl shadow-2xl relative overflow-hidden">
@@ -435,7 +509,7 @@ export default function QueryManager({ agents = [] }) {
                     value={newMessage}
                     onChange={e => setNewMessage(e.target.value)}
                     placeholder="Type your reply..."
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1e3a5f]/30 focus:border-[#1e3a5f] outline-none"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] outline-none"
                   />
                   <button 
                     type="submit"
