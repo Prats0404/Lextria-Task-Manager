@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import QueryManager from './QueryManager';
 import LoginPage from './LoginPage';
+import MemberManualModal from './MemberManualModal';
 
 // --- SYSTEM UNDER MAINTENANCE MODE ---
 // Set to true to lock down the site and pause all user interactions during upgrades.
@@ -2108,6 +2109,21 @@ export default function App() {
     setIsAdmin(currentUser?.role === 'leader');
   }, [currentUser]);
 
+  // Member Manual / What's New popup on login
+  const [showMemberManual, setShowMemberManual] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lextria_user_session');
+      const user = saved ? JSON.parse(saved) : null;
+      if (!user) return false;
+      const storageKey = 'lextria_guide_seen_' + (user.id || user.name || 'user');
+      const alreadySeen = localStorage.getItem(storageKey) === 'true';
+      const sessionDismissed = sessionStorage.getItem('lextria_guide_dismissed_session') === 'true';
+      return !alreadySeen && !sessionDismissed;
+    } catch {
+      return false;
+    }
+  });
+
   const handleGlobalLogin = (userData) => {
     const sessionData = {
       id: userData.id,
@@ -2118,6 +2134,13 @@ export default function App() {
     localStorage.setItem('lextria_query_session', JSON.stringify(sessionData));
     setCurrentUser(sessionData);
     setIsAdmin(sessionData.role === 'leader');
+
+    // Trigger manual on login if not permanently dismissed
+    const storageKey = 'lextria_guide_seen_' + (userData.id || userData.name || 'user');
+    const alreadySeen = localStorage.getItem(storageKey) === 'true';
+    if (!alreadySeen) {
+      setShowMemberManual(true);
+    }
   };
 
   const handleGlobalLogout = () => {
@@ -3750,6 +3773,15 @@ export default function App() {
         <UpdateNotice onDismiss={() => setShowUpdateNotice(false)} />
       )}
 
+      {/* Member What's New & User Manual Popup on Login */}
+      {!showSplash && (
+        <MemberManualModal
+          isOpen={showMemberManual}
+          onClose={() => setShowMemberManual(false)}
+          currentUser={currentUser}
+        />
+      )}
+
       {/* Background Orbs */}
       <div className="bg-orb bg-brand-600/30 w-[500px] h-[500px] top-[-100px] left-[-100px]" />
       <div className="bg-orb bg-accent-500/20 w-[400px] h-[400px] bottom-[10%] right-[-50px]" style={{ animationDelay: '-5s' }} />
@@ -3878,6 +3910,16 @@ export default function App() {
                 <span className="text-xs font-semibold hidden md:inline">Analytics</span>
               </button>
             )}
+
+            {/* User Manual & Guide Button */}
+            <button
+              onClick={() => setShowMemberManual(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-blue-200 hover:text-white bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 transition-all cursor-pointer shadow-[0_0_10px_rgba(59,130,246,0.15)]"
+              title="User Manual & What's New"
+            >
+              <span>📖</span>
+              <span className="hidden sm:inline">Guide</span>
+            </button>
 
             {/* Live Date & Time */}
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-xs font-medium text-slate-300">
