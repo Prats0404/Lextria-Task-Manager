@@ -7,7 +7,6 @@ export default function LoginPage({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [seeding, setSeeding] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -88,44 +87,6 @@ export default function LoginPage({ onLogin }) {
       setError(err.message || 'Could not reach database. Please check connection.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleQuickSetupLeader = async () => {
-    setSeeding(true);
-    setError('');
-    try {
-      const { data: existing } = await supabase
-        .from('members')
-        .select('*')
-        .ilike('name', 'Pranav Bhat');
-
-      if (existing && existing.length > 0) {
-        setUsername('Pranav Bhat');
-        setPassword(existing[0].password || '334');
-        setError('Leader account already exists! Password pre-filled, click Sign In.');
-        setSeeding(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('members')
-        .insert([{
-          name: 'Pranav Bhat',
-          role: 'leader',
-          password: '334'
-        }])
-        .select();
-
-      if (error) throw error;
-      if (data && data.length > 0) {
-        onLogin(data[0]);
-      }
-    } catch (err) {
-      console.error('Seed error:', err);
-      setError('Could not initialize leader account. Please ensure the "members" table is created in Supabase.');
-    } finally {
-      setSeeding(false);
     }
   };
 
@@ -215,18 +176,6 @@ export default function LoginPage({ onLogin }) {
               )}
             </button>
           </form>
-
-          {/* Quick Setup for Leader fallback */}
-          <div className="mt-6 pt-5 border-t border-white/5 text-center">
-            <button
-              type="button"
-              onClick={handleQuickSetupLeader}
-              disabled={seeding}
-              className="text-xs text-slate-400 hover:text-amber-300 transition-colors"
-            >
-              {seeding ? 'Setting up…' : 'Initialize Leader (Pranav Bhat)'}
-            </button>
-          </div>
         </div>
 
         {/* Footer info */}
