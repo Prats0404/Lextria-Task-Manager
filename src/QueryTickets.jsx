@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { 
   Plus, Clock, MessageSquare, X, Send, User, Calendar,
-  Download, Eye, Image as ImageIcon
+  Download, Eye, Image as ImageIcon, ChevronDown
 } from 'lucide-react';
 
 const BOARDS = [
@@ -335,7 +335,14 @@ export default function QueryTickets({ session, agents = [] }) {
                   <p className="text-slate-400 text-sm italic">Nothing here.</p>
                 ) : (
                   openTickets.map(ticket => (
-                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} agentsList={agentsList} />
+                    <TicketCardItem 
+                      key={ticket.id} 
+                      ticket={ticket} 
+                      onClick={() => openTicket(ticket)} 
+                      urgencyBadge={urgencyBadge} 
+                      agentsList={agentsList} 
+                      onOpenImage={(img) => setPreviewImage(img)} 
+                    />
                   ))
                 )}
               </div>
@@ -352,7 +359,14 @@ export default function QueryTickets({ session, agents = [] }) {
                   <p className="text-slate-400 text-sm italic">Nothing here.</p>
                 ) : (
                   discussingTickets.map(ticket => (
-                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} agentsList={agentsList} />
+                    <TicketCardItem 
+                      key={ticket.id} 
+                      ticket={ticket} 
+                      onClick={() => openTicket(ticket)} 
+                      urgencyBadge={urgencyBadge} 
+                      agentsList={agentsList} 
+                      onOpenImage={(img) => setPreviewImage(img)} 
+                    />
                   ))
                 )}
               </div>
@@ -371,7 +385,14 @@ export default function QueryTickets({ session, agents = [] }) {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {resolvedTickets.map(ticket => (
-                    <TicketCardItem key={ticket.id} ticket={ticket} onClick={() => openTicket(ticket)} urgencyBadge={urgencyBadge} agentsList={agentsList} />
+                    <TicketCardItem 
+                      key={ticket.id} 
+                      ticket={ticket} 
+                      onClick={() => openTicket(ticket)} 
+                      urgencyBadge={urgencyBadge} 
+                      agentsList={agentsList} 
+                      onOpenImage={(img) => setPreviewImage(img)} 
+                    />
                   ))}
                 </div>
               )}
@@ -498,77 +519,52 @@ export default function QueryTickets({ session, agents = [] }) {
                 const { text, attachments, authorName, authorRole } = parseTicketData(selectedTicket);
                 return (
                   <>
-                    {/* Prominent Author Banner at the very top */}
-                    <div className="mb-4 bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs">
-                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                        <User size={12} className="text-[#16234f]" /> Raised by
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-[#16234f] text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
-                            {authorName.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="truncate">
-                            <span className="font-bold text-slate-900 text-sm block truncate leading-tight">
-                              {authorName}
-                            </span>
-                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-slate-100 text-slate-600 border border-slate-200">
-                              {authorRole}
-                            </span>
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full shrink-0 ${urgencyBadge(selectedTicket.urgency)}`}>
-                          {selectedTicket.urgency}
+                    {/* Top Author Header matching the screenshot */}
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div>
+                        <span className="font-bold text-[#d32f2f] text-xl tracking-tight block">
+                          {authorName} {authorRole ? (authorRole.charAt(0).toUpperCase() + authorRole.slice(1)) : ''}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          {selectedTicket.board} · {new Date(selectedTicket.created_at).toLocaleDateString()} at {new Date(selectedTicket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                         </span>
                       </div>
+                      <span className={`text-[11px] font-bold px-2.5 py-0.5 border rounded-full shrink-0 ${urgencyBadge(selectedTicket.urgency)}`}>
+                        {selectedTicket.urgency}
+                      </span>
                     </div>
 
-                    <div className="mb-4">
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className="font-mono text-xs font-bold px-2.5 py-1 bg-[#16234f] text-white rounded-md">
-                          {selectedTicket.code || 'TICKET'}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-600 bg-slate-200/70 px-2.5 py-0.5 rounded-full">
-                          {selectedTicket.board}
-                        </span>
+                    {/* Attached Images preview right below author name */}
+                    {attachments.length > 0 && (
+                      <div className="mb-4 space-y-2">
+                        {attachments.map((att, idx) => (
+                          <div 
+                            key={idx}
+                            onClick={() => setPreviewImage(att)}
+                            className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative group cursor-pointer shadow-xs"
+                          >
+                            <img 
+                              src={att.preview} 
+                              alt={att.name || 'Attachment'} 
+                              className="w-full max-h-64 object-cover object-top group-hover:scale-[1.01] transition-transform duration-150" 
+                            />
+                            <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white text-xs font-semibold backdrop-blur-2xs">
+                              <Eye size={16} /> Click to expand
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex items-center text-xs text-slate-500 gap-1.5 mt-2">
-                        <Calendar size={13} className="text-slate-400" />
-                        <span>Raised {new Date(selectedTicket.created_at).toLocaleDateString()} at {new Date(selectedTicket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
+                    )}
+
+                    {/* Ticket Code (e.g. Q.85) */}
+                    <div className="font-bold text-slate-900 text-xl mb-2 tracking-tight">
+                      {selectedTicket.code || 'Q.1'}
                     </div>
 
                     {/* Query Content */}
                     <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4 shadow-xs">
-                      <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{text}</p>
+                      <p className="text-sm text-slate-800 whitespace-pre-line leading-relaxed">{text}</p>
                     </div>
-
-                    {/* Attached Images */}
-                    {attachments.length > 0 && (
-                      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4 shadow-xs">
-                        <div className="flex items-center justify-between mb-2.5">
-                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                            <ImageIcon size={14} className="text-[#16234f]" /> Attached Images ({attachments.length})
-                          </span>
-                          <span className="text-[11px] text-slate-400">Click to view</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {attachments.map((att, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => setPreviewImage(att)}
-                              className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 hover:border-[#16234f] transition-all cursor-pointer text-left focus:outline-none"
-                            >
-                              <img src={att.preview} alt={att.name || 'Attachment'} className="w-full h-24 object-cover group-hover:scale-105 transition-transform duration-200" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 text-white text-xs font-semibold">
-                                <Eye size={15} /> Preview
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </>
                 );
               })()}
@@ -739,67 +735,91 @@ export default function QueryTickets({ session, agents = [] }) {
   );
 }
 
-function TicketCardItem({ ticket, onClick, urgencyBadge, agentsList = [] }) {
-  const marker = '\n\n[ATTACHMENTS]:';
-  const rawQuery = ticket.query || '';
-  let authorName = 'Member';
-  let cleanText = rawQuery;
+function TicketCardItem({ ticket, onClick, urgencyBadge, agentsList = [], onOpenImage }) {
+  const [expanded, setExpanded] = useState(false);
+  const { text, attachments, authorName, authorRole } = parseTicketData(ticket, agentsList);
 
-  // Extract author if encoded
-  if (cleanText.includes('[AUTHOR]:')) {
-    const startIdx = cleanText.indexOf('[AUTHOR]:') + 9;
-    const endIdx = cleanText.indexOf('\n', startIdx);
-    const jsonStr = endIdx === -1 ? cleanText.substring(startIdx).trim() : cleanText.substring(startIdx, endIdx).trim();
-    try {
-      const parsed = JSON.parse(jsonStr);
-      if (parsed.name) authorName = parsed.name;
-    } catch {}
-    cleanText = endIdx === -1 ? '' : cleanText.substring(endIdx).trim();
-  } else if (ticket.created_by) {
-    const found = agentsList.find(a => a.id === ticket.created_by);
-    if (found) authorName = found.name;
-  }
+  const isLong = text && (text.length > 180 || text.split('\n').length > 3);
+  const displayText = (!expanded && isLong) ? (text.slice(0, 180) + '...') : text;
 
-  if (cleanText.startsWith('[QUERY]:')) {
-    cleanText = cleanText.replace('[QUERY]:', '').trim();
-  }
+  const displayCode = ticket.code || 'Q.1';
+  const formattedTime = new Date(ticket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  const idx = cleanText.indexOf(marker);
-  const displayText = idx !== -1 ? cleanText.substring(0, idx).trim() : cleanText;
-  const hasAttachments = idx !== -1 || cleanText.includes('[ATTACHMENTS]:');
+  const roleDisplay = authorRole ? (authorRole.charAt(0).toUpperCase() + authorRole.slice(1)) : '';
+  const authorFullHeader = `${authorName} ${roleDisplay}`.trim();
 
   return (
     <div 
       onClick={onClick}
-      className="bg-slate-50 border border-slate-200 hover:border-[#16234f]/40 hover:shadow-md rounded-lg p-3.5 cursor-pointer transition-all flex flex-col justify-between"
+      className="bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md rounded-xl p-4 cursor-pointer transition-all flex flex-col justify-between group"
     >
       <div>
-        <div className="flex justify-between items-start mb-2">
-          <span className="font-mono text-xs font-semibold text-[#16234f]">
-            {ticket.code || 'PENDING'}
+        {/* Top Header: Author Name and Role in bold Red (#d32f2f) with chevron */}
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className="font-bold text-[#d32f2f] text-[16px] tracking-tight truncate" title={authorFullHeader}>
+            {authorFullHeader}
           </span>
-          <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full ${urgencyBadge(ticket.urgency)}`}>
-            {ticket.urgency}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full ${urgencyBadge(ticket.urgency)}`}>
+              {ticket.urgency}
+            </span>
+            <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:text-slate-600 transition">
+              <ChevronDown size={14} />
+            </div>
+          </div>
         </div>
-        
-        <p className="text-sm text-slate-800 line-clamp-3 mb-2 leading-relaxed font-normal">
+
+        {/* Attached Screenshot preview if available - prominent right below name */}
+        {attachments.length > 0 && (
+          <div className="mb-3 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 relative">
+            <img 
+              src={attachments[0].preview} 
+              alt={attachments[0].name || 'Attached Screenshot'} 
+              className="w-full max-h-56 object-cover object-top hover:scale-[1.01] transition-transform duration-150"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenImage) onOpenImage(attachments[0]);
+              }}
+            />
+            {attachments.length > 1 && (
+              <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-xs">
+                +{attachments.length - 1} more
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Ticket Code (e.g. Q.85) */}
+        <div className="font-bold text-slate-900 text-lg mb-1.5 tracking-tight">
+          {displayCode}
+        </div>
+
+        {/* Description */}
+        <p className="text-sm text-slate-800 whitespace-pre-line leading-relaxed font-normal">
           {displayText}
         </p>
-
-        {hasAttachments && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md mb-2 font-medium border border-blue-200">
-            📷 Image attached
-          </span>
-        )}
       </div>
-      
-      <div className="flex justify-between items-center text-xs text-slate-400 pt-2 border-t border-slate-100 mt-1">
-        <span className="flex items-center gap-1 font-semibold text-slate-700 truncate max-w-[130px]" title={authorName}>
-          <User size={12} className="text-[#16234f]" /> {authorName}
-        </span>
-        <span className="flex items-center gap-1 shrink-0">
-          <Clock size={11}/> {new Date(ticket.created_at).toLocaleDateString()}
+
+      {/* Bottom row: Read more on left (green), timestamp on right */}
+      <div className="flex items-center justify-between text-xs pt-2.5 mt-2 border-t border-slate-100">
+        <div>
+          {isLong ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(!expanded);
+              }}
+              className="text-[#128c7e] hover:text-[#075e54] font-semibold text-xs transition cursor-pointer"
+            >
+              {expanded ? 'Read less' : 'Read more'}
+            </button>
+          ) : (
+            <span className="text-slate-400 font-medium text-[11px]">{ticket.board}</span>
+          )}
+        </div>
+        <span className="text-slate-400 font-normal text-xs">
+          {formattedTime}
         </span>
       </div>
     </div>
