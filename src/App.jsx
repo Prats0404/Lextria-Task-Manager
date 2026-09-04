@@ -2235,6 +2235,7 @@ export default function App() {
   const triggeredRemindersRef = useRef({}); // Format: { [taskId]: 'YYYY-MM-DD' }
   const titleFlashIntervalRef = useRef(null);
   const lastLocalActionTimeRef = useRef(0);
+  const recentLocalTaskUpdatesRef = useRef(new Map());
 
   const [notificationPermission, setNotificationPermission] = useState('default');
 
@@ -2559,22 +2560,36 @@ export default function App() {
       }
     }
 
+    // Merge any very recent local task updates to prevent stale realtime fetches from overwriting optimistic actions
+    allTasks = allTasks.map(t => {
+      if (recentLocalTaskUpdatesRef.current.has(t.id)) {
+        const local = recentLocalTaskUpdatesRef.current.get(t.id);
+        if (Date.now() - local.timestamp < 5000) {
+          return {
+            ...t,
+            ...local.updates
+          };
+        } else {
+          recentLocalTaskUpdatesRef.current.delete(t.id);
+        }
+      }
+      return t;
+    });
+
     const today = new Date().toISOString().split('T')[0];
     const tasksToArchive = [];
 
     // Helper to resolve true completion timestamp for any task without overwriting database
     const resolveTaskDates = (t) => {
-      const createdDate = t.created_at ? t.created_at.split('T')[0] : '';
       let compDate = t.completed_date;
       let customAt = t.custom_completed_at || t.completed_at;
 
       if (t.completed) {
-        // If task was created before today and completed without a recorded date (or misassigned today), fall back to created_at
-        if (!compDate || (compDate >= today && createdDate && createdDate < today && (t.is_archived || !t.timer_started_at))) {
-          compDate = (compDate && compDate < today) ? compDate : (createdDate || compDate || today);
+        if (!compDate) {
+          compDate = customAt ? customAt.split('T')[0] : today;
         }
-        if (!customAt || (customAt.startsWith(today) && createdDate && createdDate < today && (t.is_archived || !t.timer_started_at))) {
-          customAt = t.created_at || (compDate ? `${compDate}T00:00:00.000Z` : null);
+        if (!customAt) {
+          customAt = compDate ? `${compDate}T00:00:00.000Z` : new Date().toISOString();
         }
       }
 
@@ -2606,6 +2621,7 @@ export default function App() {
 
     // Batch update archive status in Supabase so past tasks are safely archived without failing
     if (tasksToArchive.length > 0) {
+      lastLocalActionTimeRef.current = Date.now();
       supabase.from('tasks').update({ is_archived: true }).in('id', tasksToArchive).then(({ error }) => {
         if (error) console.error("Error batch auto-archiving past tasks in Supabase:", error);
       });
@@ -2640,7 +2656,7 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
         clearTimeout(fetchTimer);
         const timeSinceLocalAction = Date.now() - lastLocalActionTimeRef.current;
-        const delay = timeSinceLocalAction < 2500 ? 2500 : 1000;
+        const delay = timeSinceLocalAction < 3000 ? 3000 : 1000;
         fetchTimer = setTimeout(() => {
           fetchData();
         }, delay);
@@ -3042,28 +3058,23 @@ export default function App() {
     let localUpdates = { ...updates };
 
     // Find current task to check current values
+    let currentTask = null;
     let currentRequiredTime = '';
     let currentTimerStartedAt = null;
     let currentCustomCompletedAt = null;
     let currentCompletedDate = null;
     const foundEmp = allEmployees.find(e => e.id === empId);
     if (foundEmp) {
-      const foundTask = foundEmp.tasks?.find(t => t.id === taskId);
-      if (foundTask) {
-        currentRequiredTime = foundTask.requiredTime;
-        currentTimerStartedAt = foundTask.timerStartedAt;
-        currentCustomCompletedAt = foundTask.customCompletedAt || foundTask.custom_completed_at;
-        currentCompletedDate = foundTask.completedDate || foundTask.completed_date;
-      }
+      currentTask = foundEmp.tasks?.find(t => t.id === taskId);
     }
-    if (!currentRequiredTime && archivedTasks) {
-      const foundArchived = archivedTasks.find(t => t.id === taskId);
-      if (foundArchived) {
-        currentRequiredTime = foundArchived.requiredTime || foundArchived.required_time;
-        currentTimerStartedAt = foundArchived.timerStartedAt || foundArchived.timer_started_at;
-        currentCustomCompletedAt = foundArchived.customCompletedAt || foundArchived.custom_completed_at;
-        currentCompletedDate = foundArchived.completedDate || foundArchived.completed_date;
-      }
+    if (!currentTask && archivedTasks) {
+      currentTask = archivedTasks.find(t => t.id === taskId);
+    }
+    if (currentTask) {
+      currentRequiredTime = currentTask.requiredTime || currentTask.required_time || '';
+      currentTimerStartedAt = currentTask.timerStartedAt || currentTask.timer_started_at || null;
+      currentCustomCompletedAt = currentTask.customCompletedAt || currentTask.custom_completed_at || null;
+      currentCompletedDate = currentTask.completedDate || currentTask.completed_date || null;
     }
 
     if (updates.completed !== undefined) {
@@ -3071,10 +3082,12 @@ export default function App() {
       const todayStr = nowIso.split('T')[0];
       
       if (updates.completed) {
-        // PRESERVE ORIGINAL COMPLETION DATE if task was completed previously
-        const preserveDate = currentCompletedDate || todayStr;
-        const preserveCustomAt = currentCustomCompletedAt || nowIso;
+        // If task was already completed, preserve existing completion date; otherwise newly set to today
+        const wasAlreadyCompleted = currentTask?.completed;
+        const preserveDate = (wasAlreadyCompleted && currentCompletedDate) ? currentCompletedDate : todayStr;
+        const preserveCustomAt = (wasAlreadyCompleted && currentCustomCompletedAt) ? currentCustomCompletedAt : nowIso;
         
+        localUpdates.completed = true;
         localUpdates.completed_date = preserveDate;
         localUpdates.completedDate = preserveDate;
         localUpdates.completed_at = preserveCustomAt;
@@ -3082,7 +3095,9 @@ export default function App() {
         localUpdates.custom_completed_at = preserveCustomAt;
         localUpdates.customCompletedAt = preserveCustomAt;
         localUpdates.updated_at = nowIso;
+        localUpdates.is_archived = false;
       } else {
+        localUpdates.completed = false;
         localUpdates.completed_date = null;
         localUpdates.completedDate = null;
         localUpdates.completed_at = null;
@@ -3109,17 +3124,24 @@ export default function App() {
     // Auto-start / change / clear timer when requiredTime is updated
     if (updates.requiredTime !== undefined) {
       const newRequiredTime = updates.requiredTime ? updates.requiredTime.trim() : '';
-      if (newRequiredTime && newRequiredTime !== 'Undefined') {
+      const isTaskCompleted = updates.completed !== undefined ? updates.completed : currentTask?.completed;
+      if (!isTaskCompleted && newRequiredTime && newRequiredTime !== 'Undefined') {
         // Only set new timer if the required time value actually changed OR there's no active timer
         if (newRequiredTime !== currentRequiredTime || !currentTimerStartedAt) {
           const nowIso = new Date().toISOString();
           localUpdates.timerStartedAt = nowIso;
         }
       } else {
-        // If requiredTime is removed/cleared
+        // If requiredTime is removed/cleared or task is completed
         localUpdates.timerStartedAt = null;
       }
     }
+
+    // Register this local update in recentLocalTaskUpdatesRef to safeguard against stale fetches
+    recentLocalTaskUpdatesRef.current.set(taskId, {
+      updates: { ...localUpdates },
+      timestamp: Date.now()
+    });
 
     // Handle restoring archived tasks if un-completed (Undo action)
     if (updates.completed === false) {
@@ -3233,10 +3255,12 @@ export default function App() {
     if (updates.completed !== undefined) {
       dbUpdates.completed = updates.completed;
       if (updates.completed) {
-        const preserveDate = currentCompletedDate || new Date().toISOString().split('T')[0];
-        const preserveCustomAt = currentCustomCompletedAt || new Date().toISOString();
+        const wasAlreadyCompleted = currentTask?.completed;
+        const preserveDate = (wasAlreadyCompleted && currentCompletedDate) ? currentCompletedDate : new Date().toISOString().split('T')[0];
+        const preserveCustomAt = (wasAlreadyCompleted && currentCustomCompletedAt) ? currentCustomCompletedAt : new Date().toISOString();
         dbUpdates.completed_date = preserveDate;
         dbUpdates.custom_completed_at = preserveCustomAt;
+        dbUpdates.is_archived = false;
       } else {
         dbUpdates.completed_date = null;
         dbUpdates.custom_completed_at = null;
@@ -3256,7 +3280,8 @@ export default function App() {
     if (updates.requiredTime !== undefined) {
       const newRequiredTime = updates.requiredTime ? updates.requiredTime.trim() : '';
       dbUpdates.required_time = newRequiredTime;
-      if (newRequiredTime && newRequiredTime !== 'Undefined') {
+      const isTaskCompleted = updates.completed !== undefined ? updates.completed : currentTask?.completed;
+      if (!isTaskCompleted && newRequiredTime && newRequiredTime !== 'Undefined') {
         if (newRequiredTime !== currentRequiredTime || !currentTimerStartedAt) {
           dbUpdates.timer_started_at = localUpdates.timerStartedAt || new Date().toISOString();
         }
@@ -3300,6 +3325,12 @@ export default function App() {
       }
     } else if (error) {
       console.error('Failed to update task in Supabase:', error);
+    }
+
+    // Refresh timestamp after database write finishes to guarantee realtime debounce window
+    lastLocalActionTimeRef.current = Date.now();
+    if (recentLocalTaskUpdatesRef.current.has(taskId)) {
+      recentLocalTaskUpdatesRef.current.get(taskId).timestamp = Date.now();
     }
   };
 
