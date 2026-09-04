@@ -68,6 +68,8 @@ export default function QueryTickets({ session, agents = [] }) {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [agentsList, setAgentsList] = useState(agents);
+  const [membersList, setMembersList] = useState([]);
+  const [mentionedTicketIds, setMentionedTicketIds] = useState(new Set());
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -103,14 +105,34 @@ export default function QueryTickets({ session, agents = [] }) {
 
   const currentBoard = BOARDS.find(b => b.key === selectedBoardKey) || BOARDS[0];
 
+  const fetchMentions = async () => {
+    if (!session?.name) return;
+    // Basic ilike query to find messages where content includes @UserName
+    const { data, error } = await supabase
+      .from('messages')
+      .select('ticket_id')
+      .ilike('content', `%@${session.name}%`);
+    if (!error && data) {
+      setMentionedTicketIds(new Set(data.map(d => d.ticket_id)));
+    }
+  };
+
   useEffect(() => {
     fetchTickets();
+    fetchMentions();
+    
     supabase.from('agents').select('id, name').then(({ data }) => {
       if (data && data.length > 0) {
         setAgentsList(data);
       }
     });
-  }, []);
+
+    supabase.from('members').select('id, name').then(({ data }) => {
+      if (data && data.length > 0) {
+        setMembersList(data);
+      }
+    });
+  }, [session?.name]);
 
   // Close lightbox on Escape key
   useEffect(() => {
@@ -269,6 +291,7 @@ export default function QueryTickets({ session, agents = [] }) {
       setNewMessage('');
       setMentionState({ active: false, query: '', startIndex: -1 });
       fetchMessages(selectedTicket.id);
+      fetchMentions();
     }
   };
 
@@ -425,8 +448,9 @@ export default function QueryTickets({ session, agents = [] }) {
 
     const unresolved = matchingTickets.filter(t => (t.status || '').toLowerCase() !== 'resolved').length;
     const openCount = matchingTickets.filter(t => (t.status || '').toLowerCase() === 'open').length;
+    const hasMention = matchingTickets.some(t => mentionedTicketIds.has(t.id));
 
-    return { unresolved, openCount };
+    return { unresolved, openCount, hasMention };
   };
 
   return (
@@ -466,6 +490,11 @@ export default function QueryTickets({ session, agents = [] }) {
                         {c.openCount}
                       </span>
                     )}
+                  </span>
+                )}
+                {c.hasMention && (
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-xs ml-1 shadow-sm font-bold">
+                    @
                   </span>
                 )}
               </button>
@@ -879,14 +908,14 @@ export default function QueryTickets({ session, agents = [] }) {
                   {/* Mention Dropdown */}
                   {mentionState.active && (
                     <div className="absolute bottom-[calc(100%-10px)] left-4 bg-white border border-slate-200 rounded-lg shadow-lg w-64 max-h-48 overflow-y-auto z-50">
-                      {agentsList.filter(a => a.name.toLowerCase().includes(mentionState.query)).length > 0 ? (
-                        agentsList.filter(a => a.name.toLowerCase().includes(mentionState.query)).map(agent => (
+                      {membersList.filter(a => a.name.toLowerCase().includes(mentionState.query)).length > 0 ? (
+                        membersList.filter(a => a.name.toLowerCase().includes(mentionState.query)).map(member => (
                           <div
-                            key={agent.id}
+                            key={member.id}
                             className="px-3 py-2 text-sm hover:bg-slate-100 cursor-pointer text-slate-800"
-                            onClick={() => handleMentionSelect(agent.name)}
+                            onClick={() => handleMentionSelect(member.name)}
                           >
-                            {agent.name}
+                            {member.name}
                           </div>
                         ))
                       ) : (
