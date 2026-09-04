@@ -2570,8 +2570,10 @@ export default function App() {
       let customAt = t.custom_completed_at || t.completed_at;
 
       if (t.completed) {
+        // For legacy tasks with no completion dates, fall back to created_at (NOT today)
+        const createdDate = t.created_at ? t.created_at.split('T')[0] : null;
         if (!compDate) {
-          compDate = customAt ? customAt.split('T')[0] : today;
+          compDate = customAt ? customAt.split('T')[0] : (createdDate || today);
         }
         if (!customAt) {
           customAt = compDate ? `${compDate}T00:00:00.000Z` : (t.created_at || new Date().toISOString());
