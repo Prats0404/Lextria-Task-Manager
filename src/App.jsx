@@ -2235,7 +2235,7 @@ export default function App() {
   const triggeredRemindersRef = useRef({}); // Format: { [taskId]: 'YYYY-MM-DD' }
   const titleFlashIntervalRef = useRef(null);
   const lastLocalActionTimeRef = useRef(0);
-  const recentLocalTaskUpdatesRef = useRef(new Map());
+
 
   const [notificationPermission, setNotificationPermission] = useState('default');
 
@@ -2560,21 +2560,6 @@ export default function App() {
       }
     }
 
-    // Merge any very recent local task updates to prevent stale realtime fetches from overwriting optimistic actions
-    allTasks = allTasks.map(t => {
-      if (recentLocalTaskUpdatesRef.current.has(t.id)) {
-        const local = recentLocalTaskUpdatesRef.current.get(t.id);
-        if (Date.now() - local.timestamp < 5000) {
-          return {
-            ...t,
-            ...local.updates
-          };
-        } else {
-          recentLocalTaskUpdatesRef.current.delete(t.id);
-        }
-      }
-      return t;
-    });
 
     const today = new Date().toISOString().split('T')[0];
     const tasksToArchive = [];
@@ -2589,7 +2574,7 @@ export default function App() {
           compDate = customAt ? customAt.split('T')[0] : today;
         }
         if (!customAt) {
-          customAt = compDate ? `${compDate}T00:00:00.000Z` : new Date().toISOString();
+          customAt = compDate ? `${compDate}T00:00:00.000Z` : (t.created_at || new Date().toISOString());
         }
       }
 
@@ -3137,12 +3122,6 @@ export default function App() {
       }
     }
 
-    // Register this local update in recentLocalTaskUpdatesRef to safeguard against stale fetches
-    recentLocalTaskUpdatesRef.current.set(taskId, {
-      updates: { ...localUpdates },
-      timestamp: Date.now()
-    });
-
     // Handle restoring archived tasks if un-completed (Undo action)
     if (updates.completed === false) {
       setArchivedTasks(prev => {
@@ -3260,7 +3239,6 @@ export default function App() {
         const preserveCustomAt = (wasAlreadyCompleted && currentCustomCompletedAt) ? currentCustomCompletedAt : new Date().toISOString();
         dbUpdates.completed_date = preserveDate;
         dbUpdates.custom_completed_at = preserveCustomAt;
-        dbUpdates.is_archived = false;
       } else {
         dbUpdates.completed_date = null;
         dbUpdates.custom_completed_at = null;
@@ -3329,9 +3307,6 @@ export default function App() {
 
     // Refresh timestamp after database write finishes to guarantee realtime debounce window
     lastLocalActionTimeRef.current = Date.now();
-    if (recentLocalTaskUpdatesRef.current.has(taskId)) {
-      recentLocalTaskUpdatesRef.current.get(taskId).timestamp = Date.now();
-    }
   };
 
   const deleteTask = async (empId, taskId) => {
