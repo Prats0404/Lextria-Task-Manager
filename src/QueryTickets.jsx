@@ -75,6 +75,13 @@ export default function QueryTickets({ session, agents = [] }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
 
+  // Mention state
+  const [mentionState, setMentionState] = useState({
+    active: false,
+    query: '',
+    startIndex: -1,
+  });
+
   // New ticket form
   const [urgency, setUrgency] = useState('Medium');
   const [queryText, setQueryText] = useState('');
@@ -210,6 +217,35 @@ export default function QueryTickets({ session, agents = [] }) {
     }
   };
 
+  const handleMessageChange = (e) => {
+    const val = e.target.value;
+    setNewMessage(val);
+
+    const cursorPosition = e.target.selectionStart;
+    const textBeforeCursor = val.slice(0, cursorPosition);
+    const words = textBeforeCursor.split(/\s/);
+    const lastWord = words[words.length - 1];
+
+    if (lastWord.startsWith('@')) {
+      const query = lastWord.slice(1).toLowerCase();
+      setMentionState({
+        active: true,
+        query: query,
+        startIndex: cursorPosition - lastWord.length
+      });
+    } else {
+      setMentionState({ active: false, query: '', startIndex: -1 });
+    }
+  };
+
+  const handleMentionSelect = (agentName) => {
+    const beforeMention = newMessage.slice(0, mentionState.startIndex);
+    const afterMention = newMessage.slice(mentionState.startIndex + mentionState.query.length + 1);
+    setNewMessage(beforeMention + '@' + agentName + ' ' + afterMention);
+    setMentionState({ active: false, query: '', startIndex: -1 });
+  };
+
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedTicket) return;
@@ -231,6 +267,7 @@ export default function QueryTickets({ session, agents = [] }) {
       alert('Error sending message: ' + (error.message || 'Please check connection.'));
     } else {
       setNewMessage('');
+      setMentionState({ active: false, query: '', startIndex: -1 });
       fetchMessages(selectedTicket.id);
     }
   };
@@ -838,11 +875,31 @@ export default function QueryTickets({ session, agents = [] }) {
 
               {/* Message Input */}
               {selectedTicket.status !== 'Resolved' ? (
-                <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-200 bg-white flex gap-2">
+                <form onSubmit={handleSendMessage} className="relative p-4 border-t border-slate-200 bg-white flex gap-2">
+                  {/* Mention Dropdown */}
+                  {mentionState.active && (
+                    <div className="absolute bottom-[calc(100%-10px)] left-4 bg-white border border-slate-200 rounded-lg shadow-lg w-64 max-h-48 overflow-y-auto z-50">
+                      {agentsList.filter(a => a.name.toLowerCase().includes(mentionState.query)).length > 0 ? (
+                        agentsList.filter(a => a.name.toLowerCase().includes(mentionState.query)).map(agent => (
+                          <div
+                            key={agent.id}
+                            className="px-3 py-2 text-sm hover:bg-slate-100 cursor-pointer text-slate-800"
+                            onClick={() => handleMentionSelect(agent.name)}
+                          >
+                            {agent.name}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-slate-500">No users found</div>
+                      )}
+                    </div>
+                  )}
                   <input 
                     type="text" 
                     value={newMessage}
-                    onChange={e => setNewMessage(e.target.value)}
+                    onChange={handleMessageChange}
+                    onKeyUp={e => handleMessageChange(e)}
+                    onClick={e => handleMessageChange(e)}
                     placeholder="Type your reply..."
                     className="flex-1 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 rounded-lg px-3 py-2 text-sm focus:border-[#16234f] outline-none"
                   />
