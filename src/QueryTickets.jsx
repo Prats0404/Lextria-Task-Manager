@@ -3,7 +3,7 @@ import { supabase } from './supabaseClient';
 import { 
   Plus, Clock, MessageSquare, X, Send, User, Calendar,
   Download, Eye, Image as ImageIcon, ChevronDown,
-  Pencil, Trash2, AlertTriangle
+  Pencil, Trash2, AlertTriangle, Paperclip, FileText
 } from 'lucide-react';
 
 const BOARDS = [
@@ -76,6 +76,8 @@ export default function QueryTickets({ session, agents = [] }) {
   const [previewImage, setPreviewImage] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [messageAttachments, setMessageAttachments] = useState([]);
+  const messageFileInputRef = useRef(null);
 
   // Mention state
   const [mentionState, setMentionState] = useState({
@@ -268,13 +270,39 @@ export default function QueryTickets({ session, agents = [] }) {
   };
 
 
+  const handleMessageAttachmentUpload = (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setMessageAttachments(prev => [...prev, { name: file.name, type: file.type, preview: ev.target.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeMessageAttachment = (index) => {
+    setMessageAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMessageKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(e);
+    }
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !selectedTicket) return;
+    if ((!newMessage.trim() && messageAttachments.length === 0) || !selectedTicket) return;
 
     const agentId = resolveAgentId(session?.name);
     const authorName = session?.name || 'Member';
-    const contentWithAuthor = `[${authorName}]: ${newMessage.trim()}`;
+    let contentWithAuthor = `[${authorName}]: ${newMessage.trim()}`;
+
+    if (messageAttachments.length > 0) {
+      contentWithAuthor += `\n[ATTACHMENTS]: ${JSON.stringify(messageAttachments)}`;
+    }
 
     const { error } = await supabase
       .from('messages')
@@ -289,6 +317,7 @@ export default function QueryTickets({ session, agents = [] }) {
       alert('Error sending message: ' + (error.message || 'Please check connection.'));
     } else {
       setNewMessage('');
+      setMessageAttachments([]);
       setMentionState({ active: false, query: '', startIndex: -1 });
       fetchMessages(selectedTicket.id);
       fetchMentions();
@@ -878,6 +907,18 @@ export default function QueryTickets({ session, agents = [] }) {
                       if (found) author = found.name;
                     }
 
+                    let attachments = [];
+                    const attMarker = '\n[ATTACHMENTS]:';
+                    if (body && body.includes(attMarker)) {
+                      const idx = body.indexOf(attMarker);
+                      const jsonStr = body.substring(idx + attMarker.length).trim();
+                      body = body.substring(0, idx);
+                      try {
+                        const parsed = JSON.parse(jsonStr);
+                        if (Array.isArray(parsed)) attachments = parsed;
+                      } catch {}
+                    }
+
                     const isOwn = (session?.name && author.toLowerCase() === session.name.toLowerCase()) ||
                                   (session?.name && session.name.replace(/\s+/g,'').toLowerCase() === author.replace(/\s+/g,'').toLowerCase());
 
@@ -891,7 +932,35 @@ export default function QueryTickets({ session, agents = [] }) {
                             ? 'bg-[#16234f] text-white rounded-br-sm' 
                             : 'bg-white text-slate-800 border border-slate-200 rounded-bl-sm shadow-sm'
                         }`}>
-                          {body}
+                          {body && <div className="whitespace-pre-line break-words">{body}</div>}
+                          {attachments.length > 0 && (
+                            <div className={`flex flex-wrap gap-2 ${body ? 'mt-2 pt-2 border-t border-white/20' : ''}`}>
+                              {attachments.map((att, idx) => (
+                                <div key={idx} className="relative group">
+                                  {att.type && att.type.startsWith('image/') ? (
+                                    <img 
+                                      src={att.preview} 
+                                      alt={att.name} 
+                                      className="h-16 w-16 object-cover rounded cursor-pointer hover:opacity-90"
+                                      onClick={() => setPreviewImage(att.preview)}
+                                    />
+                                  ) : (
+                                    <a 
+                                      href={att.preview} 
+                                      download={att.name}
+                                      className={`flex items-center gap-1.5 p-1.5 rounded border transition-colors ${
+                                        isOwn ? 'bg-white/10 hover:bg-white/20 border-white/20' : 'bg-slate-100 hover:bg-slate-200 border-slate-200'
+                                      }`}
+                                      title={`Download ${att.name}`}
+                                    >
+                                      <FileText size={16} />
+                                      <span className="text-xs truncate max-w-[100px] font-medium">{att.name}</span>
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <span className="text-[10px] text-slate-400 mt-1 px-1">
                           {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -904,7 +973,7 @@ export default function QueryTickets({ session, agents = [] }) {
 
               {/* Message Input */}
               {selectedTicket.status !== 'Resolved' ? (
-                <form onSubmit={handleSendMessage} className="relative p-4 border-t border-slate-200 bg-white flex gap-2">
+                <div className="relative p-4 border-t border-slate-200 bg-white flex flex-col gap-2">
                   {/* Mention Dropdown */}
                   {mentionState.active && (
                     <div className="absolute bottom-[calc(100%-10px)] left-4 bg-white border border-slate-200 rounded-lg shadow-lg w-64 max-h-48 overflow-y-auto z-50">
@@ -923,23 +992,67 @@ export default function QueryTickets({ session, agents = [] }) {
                       )}
                     </div>
                   )}
-                  <input 
-                    type="text" 
-                    value={newMessage}
-                    onChange={handleMessageChange}
-                    onKeyUp={e => handleMessageChange(e)}
-                    onClick={e => handleMessageChange(e)}
-                    placeholder="Type your reply..."
-                    className="flex-1 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 rounded-lg px-3 py-2 text-sm focus:border-[#16234f] outline-none"
-                  />
-                  <button 
-                    type="submit"
-                    disabled={!newMessage.trim()}
-                    className="bg-[#16234f] hover:bg-[#1f3169] disabled:opacity-40 text-white p-2.5 rounded-lg transition-colors"
-                  >
-                    <Send size={16} />
-                  </button>
-                </form>
+
+                  {/* Attachment Previews */}
+                  {messageAttachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-1">
+                      {messageAttachments.map((att, idx) => (
+                        <div key={idx} className="relative group flex items-center gap-2 bg-slate-100 p-2 rounded border border-slate-200">
+                          {att.type && att.type.startsWith('image/') ? (
+                            <img src={att.preview} alt={att.name} className="h-10 w-10 object-cover rounded" />
+                          ) : (
+                            <FileText size={24} className="text-slate-500" />
+                          )}
+                          <span className="text-xs text-slate-700 max-w-[150px] truncate" title={att.name}>{att.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeMessageAttachment(idx)}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-end gap-2 w-full">
+                    <button
+                      type="button"
+                      onClick={() => messageFileInputRef.current?.click()}
+                      className="p-2 text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0 mb-1 cursor-pointer"
+                      title="Attach file"
+                    >
+                      <Paperclip size={20} />
+                    </button>
+                    <input 
+                      type="file" 
+                      multiple 
+                      className="hidden" 
+                      ref={messageFileInputRef} 
+                      onChange={handleMessageAttachmentUpload} 
+                    />
+                    
+                    <textarea 
+                      value={newMessage}
+                      onChange={handleMessageChange}
+                      onKeyUp={e => handleMessageChange(e)}
+                      onClick={e => handleMessageChange(e)}
+                      onKeyDown={handleMessageKeyDown}
+                      placeholder="Type your reply... (Shift+Enter for new line)"
+                      className="flex-1 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 rounded-lg px-3 py-2 text-sm focus:border-[#16234f] outline-none min-h-[44px] max-h-32 resize-y custom-scrollbar"
+                      rows={1}
+                    />
+                    
+                    <button 
+                      onClick={handleSendMessage}
+                      disabled={!newMessage.trim() && messageAttachments.length === 0}
+                      className="bg-[#16234f] hover:bg-[#1f3169] disabled:opacity-40 text-white p-2.5 rounded-lg transition-colors flex-shrink-0 mb-0.5 cursor-pointer"
+                    >
+                      <Send size={16} />
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <div className="p-4 border-t border-slate-200 bg-slate-50 text-center text-sm text-slate-500">
                   This query is resolved. Reopen to continue discussion.
